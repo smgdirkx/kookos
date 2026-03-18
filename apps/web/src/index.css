@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+@theme {
+  /* Primary — main brand color (navigation, links, active states) */
+  --color-primary: #007AFF;
+  --color-primary-dark: #0056b3;
+  --color-primary-light: #E8F2FF;
+
+  /* Secondary — supporting color (tags, badges, subtle accents) */
+  --color-secondary: #5856D6;
+  --color-secondary-dark: #3F3DB3;
+  --color-secondary-light: #EDEDFB;
+
+  /* CTA — call-to-action (main buttons, important actions) */
+  --color-cta: #FF9500;
+  --color-cta-dark: #CC7700;
+  --color-cta-light: #FFF4E5;
+
+  /* Danger */
+  --color-danger: #FF3B30;
+  --color-danger-light: #FFEBEA;
+
+  /* Success */
+  --color-success: #34C759;
+  --color-success-light: #E8F9ED;
+}
+
+body {
+  @apply bg-gray-50 text-gray-900 antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* PWA: safe area padding for notch devices */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}

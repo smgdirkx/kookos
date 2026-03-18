@@ -1,0 +1,33 @@
+{
+  "name": "@kookos/api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:migrate:run": "tsx src/db/migrate.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.79.0",
+    "@hono/node-server": "^1.14.0",
+    "@kookos/shared": "*",
+    "better-auth": "^1.5.5",
+    "cheerio": "^1.0.0",
+    "dotenv": "^16.4.0",
+    "drizzle-orm": "^0.45.1",
+    "hono": "^4.12.8",
+    "pg": "^8.13.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.0",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  }
+}

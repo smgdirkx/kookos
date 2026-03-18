@@ -1,0 +1,47 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kookos
+      POSTGRES_PASSWORD: kookos_secret
+      POSTGRES_DB: kookos
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kookos"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3010:3010"
+    environment:
+      DATABASE_URL: postgresql://kookos:kookos_secret@db:5432/kookos
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3010}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      PORT: "3010"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3011:80"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:

@@ -1,0 +1,30 @@
+{
+  "name": "kookos",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "./dev.sh",
+    "build": "turbo build",
+    "db:generate": "turbo db:generate --filter=@kookos/api",
+    "db:migrate": "turbo db:migrate --filter=@kookos/api",
+    "db:push": "turbo db:push --filter=@kookos/api",
+    "check": "biome check .",
+    "check:fix": "biome check --write .",
+    "typecheck": "turbo typecheck",
+    "prepare": "husky"
+  },
+  "packageManager": "npm@11.6.2",
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,json}": "biome check --write --no-errors-on-unmatched"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.8",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "turbo": "^2.8.17",
+    "typescript": "^5.8.0"
+  }
+}
