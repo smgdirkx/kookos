@@ -110,7 +110,7 @@ export function RecipePage() {
     mutationFn: (content: string) =>
       api(`/api/recipes/${id}/comments`, {
         method: "POST",
-        body: JSON.stringify({ content }),
+        body: { content },
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["recipe", id, "comments"] });
@@ -122,7 +122,7 @@ export function RecipePage() {
     mutationFn: ({ commentId, content }: { commentId: string; content: string }) =>
       api(`/api/recipes/${id}/comments/${commentId}`, {
         method: "PATCH",
-        body: JSON.stringify({ content }),
+        body: { content },
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["recipe", id, "comments"] });
