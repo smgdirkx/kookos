@@ -18,6 +18,8 @@ COPY --from=builder /app/apps/api/drizzle ./drizzle
 COPY --from=builder /app/apps/api/entrypoint.sh ./entrypoint.sh
 COPY --from=builder /app/apps/api/package.json ./
 COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages/shared/dist ./node_modules/@kookos/shared/dist
+COPY --from=builder /app/packages/shared/package.json ./node_modules/@kookos/shared/package.json
 RUN chmod +x ./entrypoint.sh
 EXPOSE 3010
 CMD ["./entrypoint.sh"]
