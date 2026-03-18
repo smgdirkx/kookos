@@ -4,6 +4,9 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
     restart: unless-stopped
+    networks:
+      - default
+      - coolify
     environment:
       DATABASE_URL: ${DATABASE_URL}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
@@ -20,3 +23,7 @@ services:
       - "80"
     depends_on:
       - api
+
+networks:
+  coolify:
+    external: true
