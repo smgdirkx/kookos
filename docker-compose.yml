@@ -16,6 +16,23 @@ services:
       timeout: 5s
       retries: 5
 
+  seaweedfs:
+    image: chrislusf/seaweedfs
+    restart: unless-stopped
+    command: "server -s3 -filer -dir=/data -s3.config=/etc/seaweedfs/s3.json"
+    ports:
+      - "8333:8333"
+      - "8888:8888"
+      - "9333:9333"
+    volumes:
+      - seaweeddata:/data
+      - ./seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9333/cluster/status"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   api:
     build:
       context: .
@@ -29,8 +46,14 @@ services:
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3010}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       PORT: "3010"
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_BUCKET: kookos
+      S3_ACCESS_KEY: kookos_dev
+      S3_SECRET_KEY: kookos_dev_secret
     depends_on:
       db:
+        condition: service_healthy
+      seaweedfs:
         condition: service_healthy
 
   web:
@@ -45,3 +68,4 @@ services:
 
 volumes:
   pgdata:
+  seaweeddata:

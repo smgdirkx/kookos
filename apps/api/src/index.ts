@@ -10,8 +10,10 @@ import { auth } from "./auth.js";
 import { authMiddleware } from "./middleware.js";
 import aiRoutes from "./routes/ai.js";
 import commentRoutes from "./routes/comments.js";
+import imageRoutes from "./routes/images.js";
 import mealPlanRoutes from "./routes/meal-plans.js";
 import recipeRoutes from "./routes/recipes.js";
+import { ensureBucket } from "./s3.js";
 import type { AppEnv } from "./types.js";
 
 const app = new Hono<AppEnv>();
@@ -41,10 +43,20 @@ app.route("/api/recipes", recipeRoutes);
 app.route("/api/recipes/:recipeId/comments", commentRoutes);
 app.route("/api/meal-plans", mealPlanRoutes);
 app.route("/api/ai", aiRoutes);
+app.route("/api/images", imageRoutes);
 
 // Health check
 app.get("/health", (c) => c.json({ status: "ok" }));
 
 const port = Number(process.env.PORT) || 3000;
-console.log(`🍳 Kookos API starting on port ${port}`);
-serve({ fetch: app.fetch, port });
+
+// Ensure S3 bucket exists, then start server
+ensureBucket()
+  .then(() => {
+    console.log(`Kookos API starting on port ${port}`);
+    serve({ fetch: app.fetch, port });
+  })
+  .catch((err: unknown) => {
+    console.error("Failed to initialize S3 bucket:", err);
+    process.exit(1);
+  });

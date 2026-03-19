@@ -1,0 +1,18 @@
+{
+  "identities": [
+    {
+      "name": "kookos_dev",
+      "credentials": [
+        {
+          "accessKey": "kookos_dev",
+          "secretKey": "kookos_dev_secret"
+        }
+      ],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    },
+    {
+      "name": "anonymous",
+      "actions": ["Read"]
+    }
+  ]
+}

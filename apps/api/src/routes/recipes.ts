@@ -3,12 +3,26 @@ import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../db/index.js";
 import { recipeImages, recipeIngredients, recipes, recipeTags, tags } from "../db/schema.js";
+import { uploadExternalImage } from "../image.js";
 import { requireAuth } from "../middleware.js";
 import type { AppEnv } from "../types.js";
 
 const app = new Hono<AppEnv>();
 
 app.use("*", requireAuth);
+
+const S3_PUBLIC_URL = process.env.S3_PUBLIC_URL;
+
+function withImageUrls<T extends { images?: { url: string }[] }>(recipe: T): T {
+  if (recipe.images) {
+    const base = S3_PUBLIC_URL || "/images/kookos";
+    recipe.images = recipe.images.map((img) => ({
+      ...img,
+      url: `${base}/${img.url}`,
+    }));
+  }
+  return recipe;
+}
 
 // List all recipes for current user
 app.get("/", async (c) => {
@@ -22,7 +36,7 @@ app.get("/", async (c) => {
     },
     orderBy: (recipes, { desc }) => [desc(recipes.createdAt)],
   });
-  return c.json(result);
+  return c.json(result.map(withImageUrls));
 });
 
 // Search recipes using tsvector
@@ -55,7 +69,7 @@ app.get("/:id", async (c) => {
     },
   });
   if (!result) return c.json({ error: "Not found" }, 404);
-  return c.json(result);
+  return c.json(withImageUrls(result));
 });
 
 // Create recipe (with ingredients and tags)
@@ -88,13 +102,16 @@ app.post("/", async (c) => {
     );
   }
 
-  // Insert image if provided
+  // Download external image to S3 and save reference
   if (imageUrl) {
-    await db.insert(recipeImages).values({
-      recipeId: recipe.id,
-      url: imageUrl,
-      isPrimary: true,
-    });
+    const s3Key = await uploadExternalImage(imageUrl, recipe.id);
+    if (s3Key) {
+      await db.insert(recipeImages).values({
+        recipeId: recipe.id,
+        url: s3Key,
+        isPrimary: true,
+      });
+    }
   }
 
   // Trigger search vector rebuild after ingredients are inserted
