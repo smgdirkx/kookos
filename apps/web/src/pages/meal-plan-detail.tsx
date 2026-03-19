@@ -97,7 +97,7 @@ export function MealPlanDetailPage() {
                 className="flex justify-between py-2 border-b border-gray-50 last:border-0"
               >
                 <span className="text-sm">
-                  {item.amount} {item.unit} {item.name}
+                  {[item.amount, item.unit, item.name].filter(Boolean).join(" ")}
                 </span>
               </div>
             ))}
