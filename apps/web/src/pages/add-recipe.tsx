@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import heic2any from "heic2any";
 import { Camera, ImagePlus, Link as LinkIcon, Sparkles } from "lucide-react";
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -15,14 +16,15 @@ export function AddRecipePage() {
 
   async function handlePhoto(file: File) {
     setLoading(true);
-    setStatus("AI analyseert je foto...");
-
-    const base64 = await fileToBase64(file);
+    setStatus("Foto verwerken...");
 
     try {
+      const { base64, mediaType } = await compressImage(file);
+      setStatus("AI analyseert je foto...");
+
       const recipe = await api<Record<string, unknown>>("/api/ai/scan", {
         method: "POST",
-        body: { image: base64 },
+        body: { image: base64, mediaType },
       });
 
       const saved = await api<{ id: string }>("/api/recipes", {
@@ -80,6 +82,7 @@ export function AddRecipePage() {
               capture="environment"
               onChange={(e) => {
                 const file = e.target.files?.[0];
+                console.log("[scan] file selected", file?.type, file?.size);
                 if (file) handlePhoto(file);
               }}
               className="hidden"
@@ -156,14 +159,52 @@ export function AddRecipePage() {
   );
 }
 
-function fileToBase64(file: File): Promise<string> {
+const MAX_DIMENSION = 1568;
+
+async function compressImage(file: File): Promise<{ base64: string; mediaType: string }> {
+  // HEIC/HEIF: converteer eerst naar JPEG via heic2any
+  let imageBlob: Blob = file;
+  if (
+    file.type === "image/heic" ||
+    file.type === "image/heif" ||
+    file.name.toLowerCase().endsWith(".heic")
+  ) {
+    const converted = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.85 });
+    imageBlob = Array.isArray(converted) ? converted[0] : converted;
+  }
+
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      resolve(result.split(",")[1]);
+    const img = new Image();
+    const url = URL.createObjectURL(imageBlob);
+    img.onload = () => {
+      let { naturalWidth: w, naturalHeight: h } = img;
+      if (w > MAX_DIMENSION || h > MAX_DIMENSION) {
+        const scale = MAX_DIMENSION / Math.max(w, h);
+        w = Math.round(w * scale);
+        h = Math.round(h * scale);
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        URL.revokeObjectURL(url);
+        reject(new Error("Canvas niet beschikbaar"));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, w, h);
+      // Safari ondersteunt geen webp canvas export, fallback naar jpeg
+      const webpUrl = canvas.toDataURL("image/webp", 0.8);
+      const isWebp = webpUrl.startsWith("data:image/webp");
+      const dataUrl = isWebp ? webpUrl : canvas.toDataURL("image/jpeg", 0.85);
+      const mediaType = isWebp ? "image/webp" : "image/jpeg";
+      URL.revokeObjectURL(url);
+      resolve({ base64: dataUrl.split(",")[1], mediaType });
     };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Afbeelding kon niet geladen worden"));
+    };
+    img.src = url;
   });
 }

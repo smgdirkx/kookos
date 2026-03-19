@@ -1,34 +1,55 @@
-import { CalendarDays, ShoppingCart, Sparkles } from "lucide-react";
+import { Save, Sparkles } from "lucide-react";
 import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { Button, Card, Input, Loading, PageHeader, Textarea } from "@/components/ui";
 import { api } from "@/lib/api";
 
 type MealPlanDay = {
   day: number;
   meals: {
-    lunch?: { title: string; isExisting: boolean };
-    dinner?: { title: string; isExisting: boolean };
+    dinner: { recipeId: string; title: string };
   };
-};
-
-type ShoppingItem = {
-  name: string;
-  amount: string;
-  unit: string;
-  reason?: string;
 };
 
 type MealPlanResult = {
   mealPlan: MealPlanDay[];
-  shoppingList: ShoppingItem[];
 };
 
+const STORAGE_KEY = "kookos-draft-meal-plan";
+
+function loadDraft(): {
+  result: MealPlanResult;
+  ingredients: string;
+  people: string;
+  days: string;
+} | null {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function saveDraft(result: MealPlanResult, ingredients: string, people: string, days: string) {
+  sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ result, ingredients, people, days }));
+}
+
+function clearDraft() {
+  sessionStorage.removeItem(STORAGE_KEY);
+}
+
 export function MealPlanPage() {
-  const [ingredients, setIngredients] = useState("");
-  const [people, setPeople] = useState("2");
-  const [days, setDays] = useState("7");
-  const [result, setResult] = useState<MealPlanResult | null>(null);
+  const navigate = useNavigate();
+  const draft = loadDraft();
+
+  const [ingredients, setIngredients] = useState(draft?.ingredients ?? "");
+  const [people, setPeople] = useState(draft?.people ?? "2");
+  const [days, setDays] = useState(draft?.days ?? "5");
+  const [result, setResult] = useState<MealPlanResult | null>(draft?.result ?? null);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   async function generatePlan(e: React.FormEvent) {
@@ -36,6 +57,7 @@ export function MealPlanPage() {
     if (!ingredients.trim()) return;
     setLoading(true);
     setError("");
+    setResult(null);
 
     try {
       const data = await api<MealPlanResult>("/api/ai/meal-plan", {
@@ -46,21 +68,51 @@ export function MealPlanPage() {
             .map((s) => s.trim())
             .filter(Boolean),
           numberOfPeople: parseInt(people, 10) || 2,
-          numberOfDays: parseInt(days, 10) || 7,
+          numberOfDays: parseInt(days, 10) || 5,
         },
       });
       setResult(data);
+      saveDraft(data, ingredients, people, days);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Onbekende fout");
     }
     setLoading(false);
   }
 
+  async function savePlan() {
+    if (!result) return;
+    setSaving(true);
+    setError("");
+
+    try {
+      const today = new Date();
+      const name = `Weekmenu ${today.toLocaleDateString("nl-NL", { day: "numeric", month: "short" })}`;
+
+      const saved = await api<{ id: string }>("/api/meal-plans", {
+        method: "POST",
+        body: {
+          name,
+          servings: parseInt(people, 10) || 2,
+          items: result.mealPlan.map((day) => ({
+            recipeId: day.meals.dinner.recipeId,
+            day: day.day,
+          })),
+        },
+      });
+
+      clearDraft();
+      navigate(`/meal-plans/${saved.id}`);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Opslaan mislukt");
+    }
+    setSaving(false);
+  }
+
   const dayNames = ["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"];
 
   return (
     <div>
-      <PageHeader title="Weekmenu" />
+      <PageHeader title="Nieuw menu" />
 
       <form onSubmit={generatePlan} className="space-y-4">
         <Textarea
@@ -106,52 +158,34 @@ export function MealPlanPage() {
       {loading && <Loading message="AI genereert je weekmenu..." />}
 
       {result?.mealPlan && (
-        <div className="mt-8">
-          <div className="flex items-center gap-2 mb-4">
-            <CalendarDays size={20} className="text-primary" />
-            <h2 className="text-xl font-semibold">Weekmenu</h2>
-          </div>
-          <div className="space-y-3">
+        <div className="mt-8 pt-6 border-t border-gray-200">
+          <h2 className="text-xl font-semibold mb-4">Je weekmenu</h2>
+          <div className="flex flex-col gap-3">
             {result.mealPlan.map((day) => (
-              <Card key={day.day}>
-                <h3 className="font-semibold text-primary mb-2">
-                  {dayNames[(day.day - 1) % 7] ?? `Dag ${day.day}`}
-                </h3>
-                {day.meals.lunch && (
-                  <p className="text-sm">
-                    <span className="text-gray-400">Lunch:</span> {day.meals.lunch.title}
-                  </p>
-                )}
-                {day.meals.dinner && (
-                  <p className="text-sm">
-                    <span className="text-gray-400">Diner:</span> {day.meals.dinner.title}
-                  </p>
-                )}
-              </Card>
+              <Link key={day.day} to={`/recipe/${day.meals.dinner.recipeId}`}>
+                <Card interactive>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-medium text-gray-400 uppercase w-6">
+                      {dayNames[(day.day - 1) % 7] ?? `${day.day}`}
+                    </span>
+                    <span className="text-sm font-medium">{day.meals.dinner.title}</span>
+                  </div>
+                </Card>
+              </Link>
             ))}
           </div>
-        </div>
-      )}
 
-      {result?.shoppingList && result.shoppingList.length > 0 && (
-        <div className="mt-8">
-          <div className="flex items-center gap-2 mb-4">
-            <ShoppingCart size={20} className="text-secondary" />
-            <h2 className="text-xl font-semibold">Extra boodschappen</h2>
-          </div>
-          <Card>
-            {result.shoppingList.map((item, i) => (
-              <div
-                key={i}
-                className="flex justify-between py-2 border-b border-gray-50 last:border-0"
-              >
-                <span className="text-sm">
-                  {item.amount} {item.unit} {item.name}
-                </span>
-                {item.reason && <span className="text-gray-400 text-xs">{item.reason}</span>}
-              </div>
-            ))}
-          </Card>
+          <Button
+            variant="cta"
+            size="lg"
+            fullWidth
+            icon={Save}
+            className="mt-6"
+            disabled={saving}
+            onClick={savePlan}
+          >
+            {saving ? "Opslaan..." : "Opslaan"}
+          </Button>
         </div>
       )}
     </div>

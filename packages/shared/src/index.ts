@@ -120,12 +120,13 @@ export const importRecipeSchema = z.object({
 
 export const scanRecipeSchema = z.object({
   image: z.string(), // base64 encoded
+  mediaType: z.string(), // origineel MIME type van de afbeelding
 });
 
 export const generateMealPlanSchema = z.object({
   availableIngredients: z.array(z.string()),
   numberOfPeople: z.number().int().positive().default(2),
-  numberOfDays: z.number().int().positive().default(7),
+  numberOfDays: z.number().int().positive().default(5),
   preferences: z.string().optional(),
 });
 

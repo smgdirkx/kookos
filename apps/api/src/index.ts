@@ -10,6 +10,7 @@ import { auth } from "./auth.js";
 import { authMiddleware } from "./middleware.js";
 import aiRoutes from "./routes/ai.js";
 import commentRoutes from "./routes/comments.js";
+import mealPlanRoutes from "./routes/meal-plans.js";
 import recipeRoutes from "./routes/recipes.js";
 import type { AppEnv } from "./types.js";
 
@@ -38,6 +39,7 @@ app.use("/api/*", authMiddleware);
 // Routes
 app.route("/api/recipes", recipeRoutes);
 app.route("/api/recipes/:recipeId/comments", commentRoutes);
+app.route("/api/meal-plans", mealPlanRoutes);
 app.route("/api/ai", aiRoutes);
 
 // Health check

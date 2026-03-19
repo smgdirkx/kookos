@@ -26,5 +26,8 @@
     "lint-staged": "^16.4.0",
     "turbo": "^2.8.17",
     "typescript": "^5.8.0"
+  },
+  "dependencies": {
+    "heic2any": "^0.0.4"
   }
 }

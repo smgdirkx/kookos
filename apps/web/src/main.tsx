@@ -6,8 +6,9 @@ import { Layout } from "@/components/layout";
 import { useAuthStore } from "@/lib/auth";
 import { AddRecipePage } from "@/pages/add-recipe";
 import { LoginPage } from "@/pages/login";
-
 import { MealPlanPage } from "@/pages/meal-plan";
+import { MealPlanDetailPage } from "@/pages/meal-plan-detail";
+import { MealPlansPage } from "@/pages/meal-plans";
 import { RecipePage } from "@/pages/recipe";
 import { RecipesPage } from "@/pages/recipes";
 import "./index.css";
@@ -35,7 +36,9 @@ createRoot(document.getElementById("root")!).render(
           >
             <Route index element={<RecipesPage />} />
             <Route path="recipe/:id" element={<RecipePage />} />
-            <Route path="meal-plan" element={<MealPlanPage />} />
+            <Route path="meal-plans" element={<MealPlansPage />} />
+            <Route path="meal-plans/:id" element={<MealPlanDetailPage />} />
+            <Route path="meal-plan/new" element={<MealPlanPage />} />
             <Route path="add-recipe" element={<AddRecipePage />} />
           </Route>
         </Routes>

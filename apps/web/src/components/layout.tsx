@@ -4,7 +4,7 @@ import { NavLink, Outlet } from "react-router-dom";
 
 const tabs: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = [
   { to: "/", label: "Recepten", icon: BookOpen, end: true },
-  { to: "/meal-plan", label: "Weekmenu", icon: CalendarDays },
+  { to: "/meal-plans", label: "Weekmenu", icon: CalendarDays },
   { to: "/add-recipe", label: "Toevoegen", icon: Plus },
 ];
 

@@ -80,50 +80,23 @@ const mealPlanTool: Anthropic.Tool = {
             meals: {
               type: "object",
               properties: {
-                lunch: {
-                  type: "object",
-                  properties: {
-                    title: { type: "string" },
-                    isExisting: {
-                      type: "boolean",
-                      description: "true als dit een bestaand recept is",
-                    },
-                  },
-                  required: ["title", "isExisting"],
-                },
                 dinner: {
                   type: "object",
                   properties: {
-                    title: { type: "string" },
-                    isExisting: {
-                      type: "boolean",
-                      description: "true als dit een bestaand recept is",
-                    },
+                    recipeId: { type: "string", description: "De id van het bestaande recept" },
+                    title: { type: "string", description: "Exacte titel van het recept" },
                   },
-                  required: ["title", "isExisting"],
+                  required: ["recipeId", "title"],
                 },
               },
+              required: ["dinner"],
             },
           },
           required: ["day", "meals"],
         },
       },
-      shoppingList: {
-        type: "array",
-        description: "ALLEEN ingrediënten die extra gehaald moeten worden",
-        items: {
-          type: "object",
-          properties: {
-            name: { type: "string" },
-            amount: { type: "string" },
-            unit: { type: "string" },
-            reason: { type: "string", description: "Voor welk gerecht" },
-          },
-          required: ["name"],
-        },
-      },
     },
-    required: ["mealPlan", "shoppingList"],
+    required: ["mealPlan"],
   },
 };
 
@@ -151,6 +124,7 @@ function getToolInput(message: Anthropic.Message): unknown {
 const RECIPE_SYSTEM_PROMPT = `Je bent een recepten-expert. Analyseer het aangeboden recept en extraheer alle informatie.
 Gebruik Nederlandse taal voor alle tekst. Gebruik altijd de save_recipe tool om het resultaat terug te geven.
 Categoriseer elk ingrediënt op basis van de rol in het gerecht: hoofdgroenten (de groenten waar het gerecht om draait), aromaten (smaakmakers zoals ui, knoflook, kruiden), basis (pasta, rijst, aardappel), eiwitten (tofu, linzen, eieren, kaas), overig (olie, sauzen, bouillon).
+BELANGRIJK: Laat standaard keukenspullen zoals zout, peper, olie, olijfolie en boter WEG uit de ingrediëntenlijst. Die heeft iedereen al in huis.
 Bepaal ook de moeilijkheidsgraad: makkelijk (weinig stappen, basistechnieken), gemiddeld (meerdere technieken, timing belangrijk), moeilijk (geavanceerde technieken, veel stappen).`;
 
 // ── Routes ──
@@ -175,7 +149,11 @@ app.post("/scan", async (c) => {
             type: "image",
             source: {
               type: "base64",
-              media_type: "image/jpeg",
+              media_type: parsed.data.mediaType as
+                | "image/webp"
+                | "image/jpeg"
+                | "image/png"
+                | "image/gif",
               data: parsed.data.image,
             },
           },
@@ -239,6 +217,7 @@ app.post("/meal-plan", async (c) => {
   });
 
   const recipeSummaries = userRecipes.map((r) => ({
+    id: r.id,
     title: r.title,
     servings: r.servings,
     ingredients: r.ingredients?.map((i) => i.name).join(", "),
@@ -247,8 +226,10 @@ app.post("/meal-plan", async (c) => {
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 4096,
-    system: `Je bent een weekmenu-planner. Maak een weekmenu op basis van beschikbare ingrediënten en bestaande recepten.
-Gebruik bij voorkeur bestaande recepten, maar stel ook nieuwe voor als dat beter past.
+    system: `Je bent een weekmenu-planner. Maak een weekmenu met ALLEEN avondeten (geen lunch).
+BELANGRIJK: Je mag UITSLUITEND recepten kiezen uit de lijst "Bestaande recepten" die de gebruiker meestuurt. Verzin NOOIT zelf recepten.
+Gebruik altijd de exacte "id" van het recept als recipeId in je antwoord.
+Als er niet genoeg recepten zijn, herhaal dan recepten of gebruik minder dagen.
 Gebruik altijd de save_meal_plan tool om het resultaat terug te geven.`,
     tools: [mealPlanTool],
     tool_choice: { type: "tool", name: "save_meal_plan" },
