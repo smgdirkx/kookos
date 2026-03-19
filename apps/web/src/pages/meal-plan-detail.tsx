@@ -97,7 +97,9 @@ export function MealPlanDetailPage() {
                 className="flex justify-between py-2 border-b border-gray-50 last:border-0"
               >
                 <span className="text-sm">
-                  {[item.amount, item.unit, item.name].filter(Boolean).join(" ")}
+                  {[item.amount, item.unit, item.name]
+                    .filter((v) => v && !v.startsWith("<"))
+                    .join(" ")}
                 </span>
               </div>
             ))}

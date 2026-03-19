@@ -231,7 +231,11 @@ export function RecipePage() {
                     {group.items.map((ing) => (
                       <li key={ing.id} className="flex items-center gap-2 text-sm">
                         <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
-                        <span>{[ing.amount, ing.unit, ing.name].filter(Boolean).join(" ")}</span>
+                        <span>
+                          {[ing.amount, ing.unit, ing.name]
+                            .filter((v) => v && !v.startsWith("<"))
+                            .join(" ")}
+                        </span>
                       </li>
                     ))}
                   </ul>

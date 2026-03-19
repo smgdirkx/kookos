@@ -13,6 +13,12 @@ const app = new Hono<AppEnv>();
 
 app.use("*", requireAuth);
 
+/** Strip AI placeholder values like "<UNKNOWN>" from ingredient fields */
+function cleanIngredientField(value: string | undefined): string | undefined {
+  if (!value || value.startsWith("<")) return undefined;
+  return value;
+}
+
 const S3_PUBLIC_URL = process.env.S3_PUBLIC_URL;
 
 function withImageUrls<T extends { images?: { url: string }[] }>(recipe: T): T {
@@ -95,8 +101,8 @@ app.post("/", async (c) => {
       ingredients.map((ing, i) => ({
         recipeId: recipe.id,
         name: ing.name,
-        amount: ing.amount ? ing.amount : undefined,
-        unit: ing.unit,
+        amount: cleanIngredientField(ing.amount),
+        unit: cleanIngredientField(ing.unit),
         category: ing.category,
         isOptional: ing.isOptional,
         sortOrder: ing.sortOrder ?? i,
@@ -167,8 +173,8 @@ app.patch("/:id", async (c) => {
         ingredients.map((ing, i) => ({
           recipeId: id,
           name: ing.name,
-          amount: ing.amount ? ing.amount : undefined,
-          unit: ing.unit,
+          amount: cleanIngredientField(ing.amount),
+          unit: cleanIngredientField(ing.unit),
           category: ing.category,
           isOptional: ing.isOptional,
           sortOrder: ing.sortOrder ?? i,
