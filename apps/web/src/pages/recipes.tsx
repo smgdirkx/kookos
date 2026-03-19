@@ -35,6 +35,7 @@ type Recipe = {
   difficulty?: DifficultyLevel;
   prepTimeMinutes?: number;
   cookTimeMinutes?: number;
+  ingredients?: { name: string }[];
   recipeTags?: { tag: { name: string } }[];
 };
 
