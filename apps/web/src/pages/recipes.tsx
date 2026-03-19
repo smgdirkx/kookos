@@ -92,7 +92,8 @@ export function RecipesPage() {
           r.title.toLowerCase().includes(q) ||
           r.description?.toLowerCase().includes(q) ||
           r.cuisine?.toLowerCase().includes(q) ||
-          r.category?.toLowerCase().includes(q);
+          r.category?.toLowerCase().includes(q) ||
+          r.ingredients?.some((ing) => ing.name.toLowerCase().includes(q));
         if (!matches) return false;
       }
       if (maxTime !== null) {

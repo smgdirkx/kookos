@@ -97,6 +97,11 @@ app.post("/", async (c) => {
     });
   }
 
+  // Trigger search vector rebuild after ingredients are inserted
+  if (ingredients?.length) {
+    await db.update(recipes).set({ updatedAt: new Date() }).where(eq(recipes.id, recipe.id));
+  }
+
   // Insert tags
   if (tagNames?.length) {
     for (const tagName of tagNames) {
@@ -151,6 +156,8 @@ app.patch("/:id", async (c) => {
         })),
       );
     }
+    // Trigger search vector rebuild after ingredients change
+    await db.update(recipes).set({ updatedAt: new Date() }).where(eq(recipes.id, id));
   }
 
   return c.json(recipe);
