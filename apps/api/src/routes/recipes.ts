@@ -1,3 +1,4 @@
+import { DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { createRecipeSchema, updateRecipeSchema } from "@kookos/shared";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -5,6 +6,7 @@ import { db } from "../db/index.js";
 import { recipeImages, recipeIngredients, recipes, recipeTags, tags } from "../db/schema.js";
 import { uploadExternalImage } from "../image.js";
 import { requireAuth } from "../middleware.js";
+import { S3_BUCKET, s3 } from "../s3.js";
 import type { AppEnv } from "../types.js";
 
 const app = new Hono<AppEnv>();
@@ -184,6 +186,20 @@ app.patch("/:id", async (c) => {
 app.delete("/:id", async (c) => {
   const id = c.req.param("id");
   const user = c.get("user")!;
+
+  // Delete associated images from S3 before removing the recipe
+  const images = await db.query.recipeImages.findMany({
+    where: sql`${recipeImages.recipeId} = ${id}`,
+  });
+
+  for (const image of images) {
+    try {
+      await s3.send(new DeleteObjectCommand({ Bucket: S3_BUCKET, Key: image.url }));
+    } catch {
+      // Continue even if S3 delete fails
+    }
+  }
+
   const [deleted] = await db
     .delete(recipes)
     .where(sql`${recipes.id} = ${id} AND ${recipes.userId} = ${user.id}`)
