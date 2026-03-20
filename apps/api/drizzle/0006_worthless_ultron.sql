@@ -1,0 +1,1 @@
+ALTER TABLE "recipes" ADD COLUMN "important_note" text;
