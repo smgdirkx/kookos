@@ -41,6 +41,7 @@ app.get("/", async (c) => {
       ingredients: true,
       images: true,
       recipeTags: { with: { tag: true } },
+      comments: true,
     },
     orderBy: (recipes, { desc }) => [desc(recipes.createdAt)],
   });

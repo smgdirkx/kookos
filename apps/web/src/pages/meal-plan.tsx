@@ -5,21 +5,24 @@ import { Button, Card, Input, Loading, PageHeader, Textarea } from "@/components
 import { api } from "@/lib/api";
 import { generateMealPlanName } from "@/lib/date";
 
+type RecipeOption = { recipeId: string; title: string; imageUrl?: string };
+
 type MealPlanDay = {
   day: number;
-  meals: {
-    dinner: { recipeId: string; title: string };
-  };
+  options: RecipeOption[];
 };
 
 type MealPlanResult = {
   mealPlan: MealPlanDay[];
 };
 
+type Selections = Record<number, number>;
+
 const STORAGE_KEY = "kookos-draft-meal-plan";
 
 function loadDraft(): {
   result: MealPlanResult;
+  selections: Selections;
   ingredients: string;
   people: string;
   days: string;
@@ -33,8 +36,17 @@ function loadDraft(): {
   }
 }
 
-function saveDraft(result: MealPlanResult, ingredients: string, people: string, days: string) {
-  sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ result, ingredients, people, days }));
+function saveDraft(
+  result: MealPlanResult,
+  selections: Selections,
+  ingredients: string,
+  people: string,
+  days: string,
+) {
+  sessionStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({ result, selections, ingredients, people, days }),
+  );
 }
 
 function clearDraft() {
@@ -49,6 +61,7 @@ export function MealPlanPage() {
   const [people, setPeople] = useState(draft?.people ?? "2");
   const [days, setDays] = useState(draft?.days ?? "5");
   const [result, setResult] = useState<MealPlanResult | null>(draft?.result ?? null);
+  const [selections, setSelections] = useState<Selections>(draft?.selections ?? {});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -93,8 +106,13 @@ export function MealPlanPage() {
           numberOfDays: parseInt(days, 10) || 5,
         },
       });
+      const defaultSelections: Selections = {};
+      for (const day of data.mealPlan) {
+        defaultSelections[day.day] = 0;
+      }
       setResult(data);
-      saveDraft(data, ingredients, people, days);
+      setSelections(defaultSelections);
+      saveDraft(data, defaultSelections, ingredients, people, days);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Onbekende fout");
     }
@@ -112,10 +130,12 @@ export function MealPlanPage() {
         body: {
           name: generateMealPlanName(),
           servings: parseInt(people, 10) || 2,
-          items: result.mealPlan.map((day) => ({
-            recipeId: day.meals.dinner.recipeId,
-            day: day.day,
-          })),
+          items: result.mealPlan
+            .filter((day) => (selections[day.day] ?? 0) >= 0)
+            .map((day) => ({
+              recipeId: day.options[selections[day.day] ?? 0].recipeId,
+              day: day.day,
+            })),
         },
       });
 
@@ -126,8 +146,6 @@ export function MealPlanPage() {
     }
     setSaving(false);
   }
-
-  const dayNames = ["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"];
 
   return (
     <div>
@@ -189,18 +207,78 @@ export function MealPlanPage() {
         <div className="mt-8 pt-6 border-t border-gray-200">
           <h2 className="text-xl font-semibold mb-4">Je weekmenu</h2>
           <div className="flex flex-col gap-3">
-            {result.mealPlan.map((day) => (
-              <Link key={day.day} to={`/recipe/${day.meals.dinner.recipeId}`}>
-                <Card interactive>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-medium text-gray-400 uppercase w-6">
-                      {dayNames[(day.day - 1) % 7] ?? `${day.day}`}
-                    </span>
-                    <span className="text-sm font-medium">{day.meals.dinner.title}</span>
+            {result.mealPlan.map((day) => {
+              const selected = selections[day.day] ?? 0;
+              const SKIP = -1;
+
+              function radioButton(isSelected: boolean) {
+                return (
+                  <span
+                    className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${
+                      isSelected ? "border-primary" : "border-gray-300"
+                    }`}
+                  >
+                    {isSelected && <span className="w-2 h-2 rounded-full bg-primary" />}
+                  </span>
+                );
+              }
+
+              function select(idx: number) {
+                const next = { ...selections, [day.day]: idx };
+                setSelections(next);
+                saveDraft(result!, next, ingredients, people, days);
+              }
+
+              return (
+                <Card key={day.day}>
+                  <p className="text-xs font-medium text-gray-400 uppercase mb-2">Dag {day.day}</p>
+                  <div className="flex flex-col gap-1.5">
+                    {day.options.map((option, idx) => (
+                      <button
+                        key={option.recipeId}
+                        type="button"
+                        onClick={() => select(idx)}
+                        className={`flex items-center gap-2.5 text-left rounded-lg px-2.5 py-2 transition-colors ${
+                          idx === selected
+                            ? "bg-primary/10 ring-1 ring-primary/30"
+                            : "hover:bg-gray-50"
+                        }`}
+                      >
+                        {radioButton(idx === selected)}
+                        {option.imageUrl && (
+                          <img
+                            src={option.imageUrl}
+                            alt=""
+                            className="w-10 h-10 rounded-lg object-cover shrink-0"
+                          />
+                        )}
+                        <Link
+                          to={`/recipe/${option.recipeId}`}
+                          onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                          className="text-sm font-medium hover:underline"
+                        >
+                          {option.title}
+                        </Link>
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => select(SKIP)}
+                      className={`flex items-center gap-2.5 text-left rounded-lg px-2.5 py-2 transition-colors ${
+                        selected === SKIP
+                          ? "bg-primary/10 ring-1 ring-primary/30"
+                          : "hover:bg-gray-50"
+                      }`}
+                    >
+                      {radioButton(selected === SKIP)}
+                      <span className="text-sm text-gray-400 italic">
+                        Ik kies zelf iets in de volgende stap
+                      </span>
+                    </button>
                   </div>
                 </Card>
-              </Link>
-            ))}
+              );
+            })}
           </div>
 
           <Button

@@ -15,6 +15,23 @@ const app = new Hono<AppEnv>();
 
 app.use("*", requireAuth);
 
+const S3_PUBLIC_URL = process.env.S3_PUBLIC_URL;
+
+function resolveImageUrls<T extends { items: { recipe: { images?: { url: string }[] } }[] }>(
+  plan: T,
+): T {
+  const base = S3_PUBLIC_URL || "/images/kookos";
+  for (const item of plan.items) {
+    if (item.recipe.images) {
+      item.recipe.images = item.recipe.images.map((img) => ({
+        ...img,
+        url: `${base}/${img.url}`,
+      }));
+    }
+  }
+  return plan;
+}
+
 async function rebuildShoppingList(mealPlanId: string, userId: string) {
   // Delete existing shopping lists for this plan
   const existingLists = await db.query.shoppingLists.findMany({
@@ -92,9 +109,9 @@ app.get("/", async (c) => {
   const result = await db.query.mealPlans.findMany({
     where: eq(mealPlans.userId, user.id),
     orderBy: (mealPlans, { desc }) => [desc(mealPlans.createdAt)],
-    with: { items: { with: { recipe: true } } },
+    with: { items: { with: { recipe: { with: { comments: true, images: true } } } } },
   });
-  return c.json(result);
+  return c.json(result.map(resolveImageUrls));
 });
 
 // Get meal plans that contain a specific recipe
@@ -106,7 +123,7 @@ app.get("/by-recipe/:recipeId", async (c) => {
     where: eq(mealPlanItems.recipeId, recipeId),
     with: {
       mealPlan: {
-        with: { items: { with: { recipe: true } } },
+        with: { items: { with: { recipe: { with: { comments: true, images: true } } } } },
       },
     },
   });
@@ -123,7 +140,7 @@ app.get("/by-recipe/:recipeId", async (c) => {
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
 
-  return c.json(plans);
+  return c.json(plans.map(resolveImageUrls));
 });
 
 // Get single meal plan with items and shopping list
@@ -135,7 +152,7 @@ app.get("/:id", async (c) => {
     where: sql`${mealPlans.id} = ${id} AND ${mealPlans.userId} = ${user.id}`,
     with: {
       items: {
-        with: { recipe: true },
+        with: { recipe: { with: { comments: true, images: true } } },
       },
       shoppingLists: {
         with: { items: true },
@@ -144,7 +161,7 @@ app.get("/:id", async (c) => {
   });
 
   if (!result) return c.json({ error: "Not found" }, 404);
-  return c.json(result);
+  return c.json(resolveImageUrls(result));
 });
 
 // Save a generated meal plan

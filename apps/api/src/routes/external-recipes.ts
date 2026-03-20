@@ -40,26 +40,10 @@ app.get("/", async (c) => {
   };
 
   if (trimmedQuery) {
-    // Try tsvector first (handles Dutch stemming)
-    const tsResults = await db
-      .select(selectFields)
-      .from(externalRecipes)
-      .leftJoin(
-        recipes,
-        sql`${recipes.sourceUrl} = ${externalRecipes.sourceUrl} AND ${recipes.userId} = ${userId}`,
-      )
-      .where(sql`${externalRecipes.searchVector} @@ plainto_tsquery('dutch', ${trimmedQuery})`)
-      .orderBy(
-        sql`ts_rank(${externalRecipes.searchVector}, plainto_tsquery('dutch', ${trimmedQuery})) DESC`,
-      )
-      .limit(limit)
-      .offset(offset);
-
-    if (tsResults.length > 0) return c.json(tsResults);
-
-    // Fallback to ILIKE for partial matches (e.g. "auberg" → "aubergine")
+    // Combine tsvector (Dutch stemming) with ILIKE (partial/substring matches)
+    // This ensures "knol" finds both stemmed matches AND compounds like "knolselderij"
     const likePattern = `%${trimmedQuery}%`;
-    const likeResults = await db
+    const results = await db
       .select(selectFields)
       .from(externalRecipes)
       .leftJoin(
@@ -67,13 +51,19 @@ app.get("/", async (c) => {
         sql`${recipes.sourceUrl} = ${externalRecipes.sourceUrl} AND ${recipes.userId} = ${userId}`,
       )
       .where(
-        sql`${externalRecipes.title} ILIKE ${likePattern} OR ${externalRecipes.ingredientsText} ILIKE ${likePattern}`,
+        sql`${externalRecipes.searchVector} @@ plainto_tsquery('dutch', ${trimmedQuery})
+          OR ${externalRecipes.title} ILIKE ${likePattern}
+          OR ${externalRecipes.ingredientsText} ILIKE ${likePattern}`,
       )
-      .orderBy(sql`${externalRecipes.title} ASC`)
+      .orderBy(
+        // Rank tsvector matches higher, then alphabetical
+        sql`CASE WHEN ${externalRecipes.searchVector} @@ plainto_tsquery('dutch', ${trimmedQuery}) THEN 0 ELSE 1 END,
+          ${externalRecipes.title} ASC`,
+      )
       .limit(limit)
       .offset(offset);
 
-    return c.json(likeResults);
+    return c.json(results);
   }
 
   const results = await db

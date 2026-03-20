@@ -49,6 +49,7 @@ app.post("/", async (c) => {
       recipeId: recipeId,
       userId: user.id,
       content: parsed.data.content,
+      isImportant: parsed.data.isImportant ?? false,
     })
     .returning();
 
@@ -66,7 +67,11 @@ app.patch("/:commentId", async (c) => {
 
   const [comment] = await db
     .update(recipeComments)
-    .set({ content: parsed.data.content, updatedAt: new Date() })
+    .set({
+      content: parsed.data.content,
+      ...(parsed.data.isImportant !== undefined && { isImportant: parsed.data.isImportant }),
+      updatedAt: new Date(),
+    })
     .where(sql`${recipeComments.id} = ${commentId} AND ${recipeComments.userId} = ${user.id}`)
     .returning();
 

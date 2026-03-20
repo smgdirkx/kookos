@@ -77,7 +77,7 @@ const recipeTool: Anthropic.Tool = {
 
 const mealPlanTool: Anthropic.Tool = {
   name: "save_meal_plan",
-  description: "Sla het weekmenu en boodschappenlijst op",
+  description: "Sla het weekmenu op met meerdere opties per dag",
   input_schema: {
     type: "object",
     properties: {
@@ -87,22 +87,20 @@ const mealPlanTool: Anthropic.Tool = {
           type: "object",
           properties: {
             day: { type: "number" },
-            meals: {
-              type: "object",
-              properties: {
-                dinner: {
-                  type: "object",
-                  properties: {
-                    recipeId: { type: "string", description: "De id van het bestaande recept" },
-                    title: { type: "string", description: "Exacte titel van het recept" },
-                  },
-                  required: ["recipeId", "title"],
+            options: {
+              type: "array",
+              description: "1-3 receptopties voor deze dag, gesorteerd op hoe goed ze passen",
+              items: {
+                type: "object",
+                properties: {
+                  recipeId: { type: "string", description: "De id van het bestaande recept" },
+                  title: { type: "string", description: "Exacte titel van het recept" },
                 },
+                required: ["recipeId", "title"],
               },
-              required: ["dinner"],
             },
           },
-          required: ["day", "meals"],
+          required: ["day", "options"],
         },
       },
     },
@@ -133,14 +131,19 @@ function getToolInput(message: Anthropic.Message): unknown {
 
 const RECIPE_SYSTEM_PROMPT = `Je bent een recepten-expert. Analyseer het aangeboden recept en extraheer alle informatie.
 Gebruik Nederlandse taal voor alle tekst. Gebruik altijd de save_recipe tool om het resultaat terug te geven.
-BEREIDINGSWIJZE: Neem de VOLLEDIGE bereidingstekst over — inclusief alle secties zoals tips, variaties, serveersuggesties, opmerkingen en voedingsinfo. Er mag GEEN informatie verloren gaan. Als het origineel aparte secties heeft (bijv. "Variaties", "Tips"), behoud deze als duidelijke koppen in de tekst.
+
+VEGETARISCH KOKEN — STRIKTE REGEL:
+Er wordt UITSLUITEND vegetarisch gekookt. Vlees en vis/zeevruchten mogen NOOIT voorkomen in het resultaat — niet als ingrediënt, niet als suggestie, niet als serveertip, niet als variatie. Als het originele recept vlees of vis bevat of suggereert, VERVANG dit altijd door een passend vegetarisch alternatief. Dit geldt voor ALLE onderdelen: ingrediëntenlijst, bereidingswijze, tips, variaties en serveersuggesties.
+
+BEREIDINGSWIJZE: Neem de VOLLEDIGE bereidingstekst over — inclusief alle secties zoals tips, variaties, serveersuggesties, opmerkingen en voedingsinfo. Er mag GEEN informatie verloren gaan (behalve verwijzingen naar vlees/vis — die worden vervangen door vega alternatieven). Als het origineel aparte secties heeft (bijv. "Variaties", "Tips"), behoud deze als duidelijke koppen in de tekst.
 Categoriseer elk ingrediënt op basis van de rol in het gerecht: hoofdgroenten (de groenten waar het gerecht om draait), aromaten (smaakmakers zoals ui, knoflook, kruiden), basis (pasta, rijst, aardappel), eiwitten (tofu, linzen, eieren, kaas), overig (olie, sauzen, bouillon).
 BELANGRIJK: Laat standaard keukenspullen zoals zout, peper, olie, olijfolie en boter WEG uit de ingrediëntenlijst. Die heeft iedereen al in huis.
 Bepaal ook de moeilijkheidsgraad: makkelijk (weinig stappen, basistechnieken), gemiddeld (meerdere technieken, timing belangrijk), moeilijk (geavanceerde technieken, veel stappen).
 
 SUGGESTIES:
-- Scan de VOLLEDIGE tekst — titel, beschrijving, ingrediëntenlijst, bereidingsstappen, tips, en serveersuggesties — op ALLE genoemde etenswaren/ingrediënten. ELKE eetbare suggestie die ergens in de tekst wordt genoemd (bijv. "serveer met rijst of noedels", "lekker met brood erbij", "eventueel wat feta erdoor", "top met pijnboompitten") MOET als apart ingrediënt in de ingrediëntenlijst komen met isSuggested=true. Sla er GEEN ENKELE over. Als er meerdere alternatieven worden gesuggereerd (bijv. "rijst of noedels"), voeg ze ALLEMAAL toe als aparte ingrediënten.
-- VERPLICHT: Controleer of het recept een basis (koolhydraat) en een eiwit bevat. Kijk in ZOWEL de ingrediëntenlijst als de bereidingstekst. Als een van deze categorieën volledig ontbreekt, MOET je minstens één passend ingrediënt suggereren met isSuggested=true. Een compleet gerecht heeft altijd een koolhydraat én een eiwitbron — sla dit NOOIT over.
+- Scan de VOLLEDIGE tekst — titel, beschrijving, ingrediëntenlijst, bereidingsstappen, tips, en serveersuggesties — op ALLE genoemde etenswaren/ingrediënten. ELKE eetbare suggestie die ergens in de tekst wordt genoemd MOET als apart ingrediënt in de ingrediëntenlijst komen met isSuggested=true, behalve als het niet-vegetarisch is. Sla er GEEN ENKELE over. Als er meerdere alternatieven worden gesuggereerd, voeg ze ALLEMAAL toe als aparte ingrediënten.
+- NOOIT vlees of vis suggereren. Als het origineel vlees/vis suggereert als variatie of serveertip, vervang dit door een vegetarisch alternatief.
+- VERPLICHT: Controleer of het recept een basis (koolhydraat) en een eiwit bevat. Kijk in ZOWEL de ingrediëntenlijst als de bereidingstekst. Als een van deze categorieën volledig ontbreekt, MOET je minstens één passend vegetarisch ingrediënt suggereren met isSuggested=true. Een compleet gerecht heeft altijd een koolhydraat én een eiwitbron — sla dit NOOIT over.
 - Ingrediënten die WEL expliciet in de originele ingrediëntenlijst staan krijgen isSuggested=false (of laat het veld weg).`;
 
 // ── Routes ──
@@ -240,7 +243,7 @@ app.post("/meal-plan", async (c) => {
 
   const userRecipes = await db.query.recipes.findMany({
     where: eq(recipes.userId, user.id),
-    with: { ingredients: true },
+    with: { ingredients: true, images: true },
   });
 
   const recipeSummaries = userRecipes.map((r) => ({
@@ -250,13 +253,27 @@ app.post("/meal-plan", async (c) => {
     ingredients: r.ingredients?.map((i) => i.name).join(", "),
   }));
 
+  // Build image lookup for enriching AI response
+  const s3Base = process.env.S3_PUBLIC_URL || "/images/kookos";
+  const recipeImageMap = new Map<string, string>();
+  for (const r of userRecipes) {
+    const imgs = r.images ?? [];
+    const display = imgs.find((img) => img.caption !== "scan-original") ?? imgs[0];
+    if (display) recipeImageMap.set(r.id, `${s3Base}/${display.url}`);
+  }
+
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 4096,
-    system: `Je bent een weekmenu-planner. Maak een weekmenu met ALLEEN avondeten (geen lunch).
-BELANGRIJK: Je mag UITSLUITEND recepten kiezen uit de lijst "Bestaande recepten" die de gebruiker meestuurt. Verzin NOOIT zelf recepten.
+    system: `Je bent een weekmenu-planner voor een VEGETARISCH huishouden. Maak een weekmenu met ALLEEN avondeten (geen lunch).
+BELANGRIJK: Er wordt uitsluitend vegetarisch gekookt. Kies NOOIT recepten met vlees of vis.
+Je mag UITSLUITEND recepten kiezen uit de lijst "Bestaande recepten" die de gebruiker meestuurt. Verzin NOOIT zelf recepten.
 Gebruik altijd de exacte "id" van het recept als recipeId in je antwoord.
 Als er niet genoeg recepten zijn, herhaal dan recepten of gebruik minder dagen.
+
+OPTIES PER DAG: Geef per dag 2-3 receptopties als er genoeg recepten beschikbaar zijn, zodat de gebruiker kan kiezen. Sorteer de opties op hoe goed ze passen bij de beschikbare ingrediënten (beste match eerst). Als er te weinig recepten zijn voor meerdere opties, geef dan 1 optie.
+Probeer recepten niet te herhalen over opties heen — bied zoveel mogelijk variatie.
+
 Gebruik altijd de save_meal_plan tool om het resultaat terug te geven.`,
     tools: [mealPlanTool],
     tool_choice: { type: "tool", name: "save_meal_plan" },
@@ -275,7 +292,19 @@ ${JSON.stringify(recipeSummaries, null, 2)}`,
   });
 
   logAi("meal-plan", parsed.data.availableIngredients.join(", "), message);
-  return c.json(getToolInput(message));
+
+  // Enrich AI response with recipe images
+  const aiResult = getToolInput(message) as {
+    mealPlan: { day: number; options: { recipeId: string; title: string }[] }[];
+  };
+  for (const day of aiResult.mealPlan) {
+    for (const option of day.options) {
+      const imageUrl = recipeImageMap.get(option.recipeId);
+      if (imageUrl) (option as Record<string, unknown>).imageUrl = imageUrl;
+    }
+  }
+
+  return c.json(aiResult);
 });
 
 export default app;

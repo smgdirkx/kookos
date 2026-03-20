@@ -27,6 +27,7 @@ type Recipe = {
   cookTimeMinutes?: number;
   ingredients?: { name: string }[];
   importantNote?: string;
+  comments?: { id: string; content: string; isImportant: boolean }[];
   images?: { url: string; isPrimary: boolean; caption?: string }[];
   recipeTags?: { tag: { name: string } }[];
 };
@@ -285,26 +286,62 @@ export function RecipesPage() {
               <Link key={recipe.id} to={`/recipe/${recipe.id}`}>
                 <Card interactive padding="none" className="overflow-hidden">
                   <div className="sm:flex">
-                    {displayImage && (
-                      <img
-                        src={displayImage.url}
-                        alt=""
-                        className="w-full h-36 sm:w-40 sm:h-28 object-cover shrink-0"
-                      />
-                    )}
+                    {displayImage &&
+                      (() => {
+                        const notes = [
+                          ...(recipe.importantNote
+                            ? [{ id: "legacy", content: recipe.importantNote }]
+                            : []),
+                          ...(recipe.comments?.filter((c) => c.isImportant) ?? []),
+                        ];
+                        return (
+                          <div className="relative shrink-0">
+                            <img
+                              src={displayImage.url}
+                              alt=""
+                              className="w-full h-36 sm:w-40 sm:h-28 object-cover"
+                            />
+                            {notes.length > 0 && (
+                              <div className="absolute bottom-2 left-2 right-2 flex flex-wrap gap-1">
+                                {notes.map((n) => (
+                                  <span
+                                    key={n.id}
+                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-white bg-amber-500/90 backdrop-blur-sm rounded-full px-2 py-0.5 shadow-sm max-w-full"
+                                  >
+                                    <AlertTriangle size={11} className="shrink-0" />
+                                    <span className="truncate">{n.content}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     <div className="px-4 py-3 flex-1 min-w-0">
+                      {!displayImage &&
+                        (() => {
+                          const notes = [
+                            ...(recipe.importantNote
+                              ? [{ id: "legacy", content: recipe.importantNote }]
+                              : []),
+                            ...(recipe.comments?.filter((c) => c.isImportant) ?? []),
+                          ];
+                          if (!notes.length) return null;
+                          return (
+                            <div className="flex items-start gap-2 bg-amber-50 text-amber-700 rounded-lg px-2.5 py-1.5 mb-2 text-xs">
+                              <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                              <span className="line-clamp-2">
+                                {notes.map((n) => n.content).join(" · ")}
+                              </span>
+                            </div>
+                          );
+                        })()}
                       <div className="flex items-baseline justify-between gap-2">
                         <h2 className="font-semibold">{recipe.title}</h2>
                         {meta.length > 0 && (
                           <span className="text-xs text-gray-400 shrink-0">{meta.join(" · ")}</span>
                         )}
                       </div>
-                      {recipe.importantNote && (
-                        <span className="inline-flex items-center gap-1 mt-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
-                          <AlertTriangle size={12} />
-                          {recipe.importantNote}
-                        </span>
-                      )}
                       {recipe.description && (
                         <p className="text-gray-400 text-sm mt-1 line-clamp-3">
                           {recipe.description}

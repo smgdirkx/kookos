@@ -51,6 +51,7 @@ type RecipeImage = {
 type Comment = {
   id: string;
   content: string;
+  isImportant: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -380,8 +381,10 @@ export function RecipePage() {
   const [confirm, confirmModal] = useConfirm();
   const commentsRef = useRef<HTMLElement>(null);
   const [newComment, setNewComment] = useState("");
+  const [newCommentImportant, setNewCommentImportant] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
+  const [editImportant, setEditImportant] = useState(false);
   const [adjustedServings, setAdjustedServings] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -418,27 +421,37 @@ export function RecipePage() {
   });
 
   const addCommentMutation = useMutation({
-    mutationFn: (content: string) =>
+    mutationFn: ({ content, isImportant }: { content: string; isImportant: boolean }) =>
       api(`/api/recipes/${id}/comments`, {
         method: "POST",
-        body: { content },
+        body: { content, isImportant },
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["recipe", id, "comments"] });
       setNewComment("");
+      setNewCommentImportant(false);
     },
   });
 
   const updateCommentMutation = useMutation({
-    mutationFn: ({ commentId, content }: { commentId: string; content: string }) =>
+    mutationFn: ({
+      commentId,
+      content,
+      isImportant,
+    }: {
+      commentId: string;
+      content: string;
+      isImportant: boolean;
+    }) =>
       api(`/api/recipes/${id}/comments/${commentId}`, {
         method: "PATCH",
-        body: { content },
+        body: { content, isImportant },
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["recipe", id, "comments"] });
       setEditingId(null);
       setEditContent("");
+      setEditImportant(false);
     },
   });
 
@@ -673,7 +686,16 @@ export function RecipePage() {
           </button>
           {/* Action bar on image */}
           {!isEditing && (
-            <div className="absolute bottom-0 inset-x-0 flex justify-end gap-3 px-4 py-2.5 bg-black/30 backdrop-blur-md">
+            <div className="absolute bottom-0 inset-x-0 flex items-center gap-3 px-4 py-2.5 bg-black/30 backdrop-blur-md">
+              <button
+                type="button"
+                onClick={() => setShowAddToMealPlan(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/20 text-white text-sm font-medium hover:bg-white/30 transition-colors"
+              >
+                <CalendarPlus size={16} />
+                Toevoegen aan weekmenu
+              </button>
+              <div className="flex-1" />
               <button
                 type="button"
                 onClick={() => imageInputRef.current?.click()}
@@ -681,13 +703,6 @@ export function RecipePage() {
                 className="p-2 rounded-full text-white/90 hover:bg-white/15 transition-colors"
               >
                 <ImagePlus size={20} />
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowAddToMealPlan(true)}
-                className="p-2 rounded-full text-white/90 hover:bg-white/15 transition-colors"
-              >
-                <CalendarPlus size={20} />
               </button>
               <button
                 type="button"
@@ -723,6 +738,14 @@ export function RecipePage() {
               >
                 <ArrowLeft size={20} />
               </button>
+              <button
+                type="button"
+                onClick={() => setShowAddToMealPlan(true)}
+                className="inline-flex items-center gap-1.5 ml-2 px-3 py-1.5 rounded-full bg-white/20 text-white text-sm font-medium hover:bg-white/30 transition-colors"
+              >
+                <CalendarPlus size={16} />
+                Toevoegen aan weekmenu
+              </button>
               <div className="flex-1" />
               <button
                 type="button"
@@ -731,13 +754,6 @@ export function RecipePage() {
                 className="p-2 rounded-full text-white/90 hover:bg-white/15 transition-colors"
               >
                 <ImagePlus size={20} />
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowAddToMealPlan(true)}
-                className="p-2 rounded-full text-white/90 hover:bg-white/15 transition-colors"
-              >
-                <CalendarPlus size={20} />
               </button>
               <button
                 type="button"
@@ -919,8 +935,32 @@ export function RecipePage() {
         )
       )}
 
-      {/* Important note */}
-      {isEditing && editData ? (
+      {/* Important notes (from comments + legacy importantNote field) */}
+      {!isEditing && (
+        <>
+          {recipe.importantNote && (
+            <div className="flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 mb-2">
+              <AlertTriangle size={18} className="text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-sm font-medium text-amber-800">{recipe.importantNote}</p>
+            </div>
+          )}
+          {comments
+            .filter((c) => c.isImportant)
+            .map((c) => (
+              <div
+                key={c.id}
+                className="flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 mb-2"
+              >
+                <AlertTriangle size={18} className="text-amber-500 shrink-0 mt-0.5" />
+                <p className="text-sm font-medium text-amber-800">{c.content}</p>
+              </div>
+            ))}
+          {(recipe.importantNote || comments.some((c) => c.isImportant)) && (
+            <div className="mb-2" />
+          )}
+        </>
+      )}
+      {isEditing && editData && (
         <div className="mb-4">
           <label className="block text-xs font-medium text-gray-500 mb-1">
             Belangrijke opmerking (wordt opvallend getoond)
@@ -932,12 +972,7 @@ export function RecipePage() {
             className="w-full px-3 py-2 rounded-lg border border-amber-300 bg-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent placeholder:text-amber-300"
           />
         </div>
-      ) : recipe.importantNote ? (
-        <div className="flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 mb-4">
-          <AlertTriangle size={18} className="text-amber-500 shrink-0 mt-0.5" />
-          <p className="text-sm font-medium text-amber-800">{recipe.importantNote}</p>
-        </div>
-      ) : null}
+      )}
 
       {/* Ingredients */}
       {isEditing && editData ? (
@@ -1144,13 +1179,21 @@ export function RecipePage() {
               onClick={() => {
                 setEditingId(comment.id);
                 setEditContent(comment.content);
+                setEditImportant(comment.isImportant);
               }}
-              className="w-full text-left px-3 py-2.5 rounded-xl bg-white border border-gray-200 hover:border-gray-300 transition-colors"
+              className={`w-full text-left px-3 py-2.5 rounded-xl border transition-colors ${comment.isImportant ? "bg-amber-50 border-amber-200 hover:border-amber-300" : "bg-white border-gray-200 hover:border-gray-300"}`}
             >
-              <p className="text-sm whitespace-pre-line line-clamp-3">{comment.content}</p>
-              <span className="text-xs text-gray-400 mt-1 block">
-                {formatDate(comment.createdAt)}
-              </span>
+              <div className="flex items-start gap-2">
+                {comment.isImportant && (
+                  <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm whitespace-pre-line line-clamp-3">{comment.content}</p>
+                  <span className="text-xs text-gray-400 mt-1 block">
+                    {formatDate(comment.createdAt)}
+                  </span>
+                </div>
+              </div>
             </button>
           ))}
         </div>
@@ -1167,6 +1210,8 @@ export function RecipePage() {
                 setEditingId(null);
                 setEditContent("");
                 setNewComment("");
+                setNewCommentImportant(false);
+                setEditImportant(false);
               }}
               aria-label="Sluiten"
               tabIndex={-1}
@@ -1182,6 +1227,8 @@ export function RecipePage() {
                     setEditingId(null);
                     setEditContent("");
                     setNewComment("");
+                    setNewCommentImportant(false);
+                    setEditImportant(false);
                   }}
                   className="text-gray-400 hover:text-gray-600"
                 >
@@ -1200,15 +1247,40 @@ export function RecipePage() {
                 rows={4}
                 ref={(el) => el?.focus()}
               />
+              <label className="flex items-center gap-2.5 mt-3 cursor-pointer select-none">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={editingId === "new" ? newCommentImportant : editImportant}
+                  onClick={() =>
+                    editingId === "new"
+                      ? setNewCommentImportant((v) => !v)
+                      : setEditImportant((v) => !v)
+                  }
+                  className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${(editingId === "new" ? newCommentImportant : editImportant) ? "bg-amber-500" : "bg-gray-200"}`}
+                >
+                  <span
+                    className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${(editingId === "new" ? newCommentImportant : editImportant) ? "translate-x-[18px]" : "translate-x-[3px]"}`}
+                  />
+                </button>
+                <div className="flex items-center gap-1.5 text-sm text-gray-600">
+                  <AlertTriangle size={14} className="text-amber-500" />
+                  <span>Belangrijk</span>
+                </div>
+              </label>
               <div className="flex gap-2 mt-3">
                 {editingId === "new" ? (
                   <Button
                     size="sm"
                     onClick={() => {
                       if (newComment.trim()) {
-                        addCommentMutation.mutate(newComment.trim());
+                        addCommentMutation.mutate({
+                          content: newComment.trim(),
+                          isImportant: newCommentImportant,
+                        });
                         setEditingId(null);
                         setNewComment("");
+                        setNewCommentImportant(false);
                       }
                     }}
                     disabled={!newComment.trim() || addCommentMutation.isPending}
@@ -1224,6 +1296,7 @@ export function RecipePage() {
                           updateCommentMutation.mutate({
                             commentId: editingId,
                             content: editContent,
+                            isImportant: editImportant,
                           });
                         }
                       }}

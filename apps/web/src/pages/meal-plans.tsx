@@ -1,15 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, Check, Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { AlertTriangle, CalendarDays, Check, Plus } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Card, EmptyState, LinkButton, Loading, PageHeader } from "@/components/ui";
 import { api } from "@/lib/api";
+
+type RecipeImage = { id: string; url: string; caption?: string | null };
 
 type MealPlanItem = {
   id: string;
   date: string;
   checked: boolean;
-  recipe: { id: string; title: string };
+  recipe: {
+    id: string;
+    title: string;
+    importantNote?: string;
+    images?: RecipeImage[];
+    comments?: { id: string; content: string; isImportant: boolean }[];
+  };
 };
 
 type MealPlan = {
@@ -24,44 +31,69 @@ type MealPlan = {
 
 const dayNames = ["zo", "ma", "di", "wo", "do", "vr", "za"];
 
-function CheckableItem({ item, onCheck }: { item: MealPlanItem; onCheck: () => void }) {
-  const [checked, setChecked] = useState(false);
-  const [hiding, setHiding] = useState(false);
-
-  useEffect(() => {
-    if (!checked) return;
-    const t1 = setTimeout(() => setHiding(true), 400);
-    const t2 = setTimeout(() => onCheck(), 800);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
-  }, [checked, onCheck]);
-
+function CheckableItem({
+  item,
+  onToggle,
+}: {
+  item: MealPlanItem;
+  onToggle: (checked: boolean) => void;
+}) {
   const d = new Date(item.date);
+  const imgs = item.recipe.images ?? [];
+  const displayImage = imgs.find((img) => img.caption !== "scan-original") ?? imgs[0];
 
   return (
     <div
-      className={`flex items-center gap-2.5 py-1.5 px-1 -mx-1 rounded-lg transition-all duration-400 ${
-        hiding ? "opacity-0 max-h-0 py-0 overflow-hidden" : "opacity-100 max-h-12"
-      } ${checked ? "text-gray-300" : ""}`}
+      className={`flex items-center gap-2.5 py-1.5 px-1 -mx-1 rounded-lg transition-colors ${item.checked ? "opacity-60" : ""}`}
     >
       <button
         type="button"
-        onClick={() => setChecked(true)}
-        disabled={checked}
+        onClick={() => onToggle(!item.checked)}
         className={`w-5 h-5 rounded-md border-2 shrink-0 flex items-center justify-center transition-colors ${
-          checked ? "bg-success border-success text-white" : "border-gray-300 hover:border-primary"
+          item.checked
+            ? "bg-success border-success text-white"
+            : "border-gray-300 hover:border-primary"
         }`}
       >
-        {checked && <Check size={12} />}
+        {item.checked && <Check size={12} />}
       </button>
       <span className="text-xs font-medium text-gray-400 uppercase w-5">
         {dayNames[d.getDay()]}
       </span>
-      <span className={`text-sm ${checked ? "line-through text-gray-300" : ""}`}>
-        {item.recipe.title}
-      </span>
+      {displayImage && (
+        <img src={displayImage.url} alt="" className="w-8 h-8 rounded-md object-cover shrink-0" />
+      )}
+      <div className="flex-1 min-w-0">
+        <Link
+          to={`/recipe/${item.recipe.id}`}
+          className={`text-sm hover:underline ${item.checked ? "line-through text-gray-400" : ""}`}
+        >
+          {item.recipe.title}
+        </Link>
+        {!item.checked &&
+          (() => {
+            const notes = [
+              ...(item.recipe.importantNote
+                ? [{ id: "legacy", content: item.recipe.importantNote }]
+                : []),
+              ...(item.recipe.comments?.filter((c) => c.isImportant) ?? []),
+            ];
+            if (!notes.length) return null;
+            return (
+              <div className="flex flex-wrap gap-1 mt-0.5">
+                {notes.map((n) => (
+                  <span
+                    key={n.id}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-1.5 py-0.5"
+                  >
+                    <AlertTriangle size={10} />
+                    <span className="line-clamp-1">{n.content}</span>
+                  </span>
+                ))}
+              </div>
+            );
+          })()}
+      </div>
     </div>
   );
 }
@@ -161,17 +193,17 @@ export function MealPlansPage() {
                   </p>
                 </Link>
 
-                {unchecked.length > 0 && (
+                {sortedItems.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-gray-100">
-                    {unchecked.map((item) => (
+                    {sortedItems.map((item) => (
                       <CheckableItem
                         key={item.id}
                         item={item}
-                        onCheck={() =>
+                        onToggle={(checked) =>
                           toggleMutation.mutate({
                             planId: plan.id,
                             itemId: item.id,
-                            checked: true,
+                            checked,
                           })
                         }
                       />

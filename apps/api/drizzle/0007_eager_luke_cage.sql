@@ -1,0 +1,1 @@
+ALTER TABLE "recipe_comments" ADD COLUMN "is_important" boolean DEFAULT false NOT NULL;

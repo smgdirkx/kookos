@@ -108,10 +108,12 @@ export const shoppingListItemSchema = z.object({
 
 export const createCommentSchema = z.object({
   content: z.string().min(1).max(2000),
+  isImportant: z.boolean().optional(),
 });
 
 export const updateCommentSchema = z.object({
   content: z.string().min(1).max(2000),
+  isImportant: z.boolean().optional(),
 });
 
 // ── AI feature schemas ──

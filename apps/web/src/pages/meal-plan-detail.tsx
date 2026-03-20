@@ -26,12 +26,14 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button, Card, Input, Loading, useConfirm } from "@/components/ui";
 import { api } from "@/lib/api";
 
+type RecipeImage = { id: string; url: string; caption?: string | null };
+
 type MealPlanItem = {
   id: string;
   date: string;
   mealType: string;
   checked: boolean;
-  recipe: { id: string; title: string; importantNote?: string };
+  recipe: { id: string; title: string; importantNote?: string; images?: RecipeImage[] };
 };
 
 type MealPlanDetail = {
@@ -56,6 +58,7 @@ type MealPlanDetail = {
 type Recipe = {
   id: string;
   title: string;
+  images?: RecipeImage[];
 };
 
 const dayNames = ["Zo", "Ma", "Di", "Wo", "Do", "Vr", "Za"];
@@ -72,6 +75,8 @@ function SortableItem({ item, onDelete }: { item: MealPlanItem; onDelete: (id: s
 
   const date = new Date(item.date);
   const dayName = dayNames[date.getDay()];
+  const images = item.recipe.images ?? [];
+  const displayImage = images.find((img) => img.caption !== "scan-original") ?? images[0];
 
   return (
     <div
@@ -89,6 +94,13 @@ function SortableItem({ item, onDelete }: { item: MealPlanItem; onDelete: (id: s
           <GripVertical size={16} />
         </button>
         <span className="text-xs font-medium text-gray-400 uppercase w-6">{dayName}</span>
+        {displayImage && (
+          <img
+            src={displayImage.url}
+            alt=""
+            className="w-10 h-10 rounded-lg object-cover shrink-0"
+          />
+        )}
         <Link
           to={`/recipe/${item.recipe.id}`}
           className="flex-1 text-sm font-medium hover:underline"
@@ -309,17 +321,28 @@ export function MealPlanDetailPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
           <div className="mt-2 max-h-48 overflow-y-auto">
-            {filteredRecipes.map((recipe) => (
-              <button
-                key={recipe.id}
-                type="button"
-                onClick={() => addItemMutation.mutate(recipe.id)}
-                disabled={addItemMutation.isPending}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 rounded-lg transition-colors"
-              >
-                {recipe.title}
-              </button>
-            ))}
+            {filteredRecipes.map((recipe) => {
+              const imgs = recipe.images ?? [];
+              const img = imgs.find((i) => i.caption !== "scan-original") ?? imgs[0];
+              return (
+                <button
+                  key={recipe.id}
+                  type="button"
+                  onClick={() => addItemMutation.mutate(recipe.id)}
+                  disabled={addItemMutation.isPending}
+                  className="w-full flex items-center gap-2.5 text-left px-3 py-2 text-sm hover:bg-gray-50 rounded-lg transition-colors"
+                >
+                  {img && (
+                    <img
+                      src={img.url}
+                      alt=""
+                      className="w-8 h-8 rounded-md object-cover shrink-0"
+                    />
+                  )}
+                  {recipe.title}
+                </button>
+              );
+            })}
             {filteredRecipes.length === 0 && (
               <p className="text-sm text-gray-400 px-3 py-2">Geen recepten gevonden</p>
             )}
