@@ -290,11 +290,12 @@ export function RecipesPage() {
             <Link key={recipe.id} to={`/recipe/${recipe.id}`}>
               <Card interactive className="mb-3">
                 <div className="flex gap-3">
-                  {recipe.images?.length > 0 &&
+                  {recipe.images &&
+                    recipe.images.length > 0 &&
                     (() => {
+                      const images = recipe.images;
                       const displayImage =
-                        recipe.images.find((img) => img.caption !== "scan-original") ??
-                        recipe.images[0];
+                        images.find((img) => img.caption !== "scan-original") ?? images[0];
                       return (
                         <img
                           src={displayImage.url}
