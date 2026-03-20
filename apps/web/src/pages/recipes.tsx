@@ -1,6 +1,6 @@
 import { type DifficultyLevel, difficultyLabels } from "@kookos/shared";
 import { useQuery } from "@tanstack/react-query";
-import { BookOpen, Plus, Search, SlidersHorizontal, X } from "lucide-react";
+import { AlertTriangle, BookOpen, Plus, Search, SlidersHorizontal, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -26,6 +26,7 @@ type Recipe = {
   prepTimeMinutes?: number;
   cookTimeMinutes?: number;
   ingredients?: { name: string }[];
+  importantNote?: string;
   images?: { url: string; isPrimary: boolean; caption?: string }[];
   recipeTags?: { tag: { name: string } }[];
 };
@@ -298,6 +299,12 @@ export function RecipesPage() {
                           <span className="text-xs text-gray-400 shrink-0">{meta.join(" · ")}</span>
                         )}
                       </div>
+                      {recipe.importantNote && (
+                        <span className="inline-flex items-center gap-1 mt-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                          <AlertTriangle size={12} />
+                          {recipe.importantNote}
+                        </span>
+                      )}
                       {recipe.description && (
                         <p className="text-gray-400 text-sm mt-1 line-clamp-3">
                           {recipe.description}

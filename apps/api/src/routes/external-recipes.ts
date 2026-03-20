@@ -2,7 +2,7 @@ import { searchExternalRecipesSchema } from "@kookos/shared";
 import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../db/index.js";
-import { externalRecipes } from "../db/schema.js";
+import { externalRecipes, recipes } from "../db/schema.js";
 import { requireAuth } from "../middleware.js";
 import { syncExternalRecipes } from "../services/scraper.js";
 import type { AppEnv } from "../types.js";
@@ -23,25 +23,31 @@ app.get("/", async (c) => {
   const { query, page, limit } = parsed.data;
   const offset = (page - 1) * limit;
   const trimmedQuery = query?.trim();
+  const userId = c.get("user")!.id;
+
+  const selectFields = {
+    id: externalRecipes.id,
+    slug: externalRecipes.slug,
+    sourceUrl: externalRecipes.sourceUrl,
+    title: externalRecipes.title,
+    description: externalRecipes.description,
+    imageUrl: externalRecipes.imageUrl,
+    author: externalRecipes.author,
+    category: externalRecipes.category,
+    ingredientsText: externalRecipes.ingredientsText,
+    publishedAt: externalRecipes.publishedAt,
+    importedRecipeId: recipes.id,
+  };
 
   if (trimmedQuery) {
-    const selectFields = {
-      id: externalRecipes.id,
-      slug: externalRecipes.slug,
-      sourceUrl: externalRecipes.sourceUrl,
-      title: externalRecipes.title,
-      description: externalRecipes.description,
-      imageUrl: externalRecipes.imageUrl,
-      author: externalRecipes.author,
-      category: externalRecipes.category,
-      ingredientsText: externalRecipes.ingredientsText,
-      publishedAt: externalRecipes.publishedAt,
-    };
-
     // Try tsvector first (handles Dutch stemming)
     const tsResults = await db
       .select(selectFields)
       .from(externalRecipes)
+      .leftJoin(
+        recipes,
+        sql`${recipes.sourceUrl} = ${externalRecipes.sourceUrl} AND ${recipes.userId} = ${userId}`,
+      )
       .where(sql`${externalRecipes.searchVector} @@ plainto_tsquery('dutch', ${trimmedQuery})`)
       .orderBy(
         sql`ts_rank(${externalRecipes.searchVector}, plainto_tsquery('dutch', ${trimmedQuery})) DESC`,
@@ -56,6 +62,10 @@ app.get("/", async (c) => {
     const likeResults = await db
       .select(selectFields)
       .from(externalRecipes)
+      .leftJoin(
+        recipes,
+        sql`${recipes.sourceUrl} = ${externalRecipes.sourceUrl} AND ${recipes.userId} = ${userId}`,
+      )
       .where(
         sql`${externalRecipes.title} ILIKE ${likePattern} OR ${externalRecipes.ingredientsText} ILIKE ${likePattern}`,
       )
@@ -67,19 +77,12 @@ app.get("/", async (c) => {
   }
 
   const results = await db
-    .select({
-      id: externalRecipes.id,
-      slug: externalRecipes.slug,
-      sourceUrl: externalRecipes.sourceUrl,
-      title: externalRecipes.title,
-      description: externalRecipes.description,
-      imageUrl: externalRecipes.imageUrl,
-      author: externalRecipes.author,
-      category: externalRecipes.category,
-      ingredientsText: externalRecipes.ingredientsText,
-      publishedAt: externalRecipes.publishedAt,
-    })
+    .select(selectFields)
     .from(externalRecipes)
+    .leftJoin(
+      recipes,
+      sql`${recipes.sourceUrl} = ${externalRecipes.sourceUrl} AND ${recipes.userId} = ${userId}`,
+    )
     .orderBy(sql`${externalRecipes.title} ASC`)
     .limit(limit)
     .offset(offset);

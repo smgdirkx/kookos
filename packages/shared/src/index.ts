@@ -65,6 +65,7 @@ export const createRecipeSchema = z.object({
   source: z.enum(["scan", "url", "manual"]).optional(),
   sourceUrl: z.string().url().optional(),
   notes: z.string().optional(),
+  importantNote: z.string().optional(),
   ingredients: z.array(recipeIngredientSchema).optional(),
   tags: z.array(z.string()).optional(),
 });
@@ -153,6 +154,7 @@ export type ExternalRecipe = {
   ingredientsText: string | null;
   instructionsText: string | null;
   publishedAt: string | null;
+  importedRecipeId: string | null;
 };
 
 // ── Type exports ──

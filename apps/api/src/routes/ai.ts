@@ -5,6 +5,7 @@ import { Hono } from "hono";
 import { db } from "../db/index.js";
 import { recipes } from "../db/schema.js";
 import { requireAuth } from "../middleware.js";
+import { cleanHtml, extractJsonLd, fetchPage } from "../services/fetch-page.js";
 import type { AppEnv } from "../types.js";
 
 const anthropic = new Anthropic();
@@ -188,14 +189,25 @@ app.post("/import", async (c) => {
   const parsed = importRecipeSchema.safeParse(body);
   if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
 
-  const response = await fetch(parsed.data.url);
-  const html = await response.text();
-  const trimmedHtml = html.slice(0, 50000);
+  const html = await fetchPage(parsed.data.url);
 
   // Extract image from HTML meta tags
   const ogImage =
     html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i)?.[1] ??
     html.match(/<meta[^>]*name=["']twitter:image["'][^>]*content=["']([^"']+)["']/i)?.[1];
+
+  // Build the prompt: prefer JSON-LD structured data, fall back to cleaned HTML
+  const jsonLd = extractJsonLd(html);
+  let promptContent: string;
+  if (jsonLd) {
+    console.log("[ai:import] Found JSON-LD recipe data, using structured data");
+    const cleaned = cleanHtml(html).slice(0, 30000);
+    promptContent = `Extraheer het recept uit deze webpagina.\n\nURL: ${parsed.data.url}\n\nGestructureerde data (JSON-LD):\n${jsonLd}\n\nHTML (voor extra context):\n${cleaned}`;
+  } else {
+    console.log("[ai:import] No JSON-LD found, using cleaned HTML");
+    const cleaned = cleanHtml(html).slice(0, 50000);
+    promptContent = `Extraheer het recept uit deze webpagina.\n\nURL: ${parsed.data.url}\n\nHTML:\n${cleaned}`;
+  }
 
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
@@ -206,7 +218,7 @@ app.post("/import", async (c) => {
     messages: [
       {
         role: "user",
-        content: `Extraheer het recept uit deze webpagina.\n\nURL: ${parsed.data.url}\n\nHTML:\n${trimmedHtml}`,
+        content: promptContent,
       },
     ],
   });

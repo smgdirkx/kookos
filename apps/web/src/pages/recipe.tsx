@@ -8,6 +8,7 @@ import {
 } from "@kookos/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   ArrowLeft,
   Calendar,
   CalendarPlus,
@@ -66,6 +67,7 @@ type Recipe = {
   category?: string;
   difficulty?: DifficultyLevel;
   notes?: string;
+  importantNote?: string;
   source?: string;
   sourceUrl?: string;
   ingredients: Ingredient[];
@@ -81,6 +83,7 @@ type EditData = {
   prepTimeMinutes: number | undefined;
   cookTimeMinutes: number | undefined;
   difficulty: DifficultyLevel | undefined;
+  importantNote: string;
   ingredients: Ingredient[];
 };
 
@@ -93,6 +96,7 @@ function recipeToEditData(recipe: Recipe): EditData {
     prepTimeMinutes: recipe.prepTimeMinutes,
     cookTimeMinutes: recipe.cookTimeMinutes,
     difficulty: recipe.difficulty,
+    importantNote: recipe.importantNote ?? "",
     ingredients: recipe.ingredients.map((ing) => ({ ...ing })),
   };
 }
@@ -470,6 +474,7 @@ export function RecipePage() {
           prepTimeMinutes: data.prepTimeMinutes,
           cookTimeMinutes: data.cookTimeMinutes,
           difficulty: data.difficulty,
+          importantNote: data.importantNote || undefined,
           ingredients: data.ingredients.map((ing, i) => ({
             name: ing.name,
             amount: ing.amount || undefined,
@@ -581,7 +586,7 @@ export function RecipePage() {
         setUploading(false);
       }
     },
-    [id, recipe?.images?.length, queryClient],
+    [id, recipe?.images?.filter, queryClient],
   );
 
   const scrollToComments = () => {
@@ -611,7 +616,7 @@ export function RecipePage() {
       el.removeEventListener("scroll", handleScroll);
       clearInterval(interval);
     };
-  }, [recipe?.images]);
+  }, []);
 
   if (isLoading || !recipe) return <Loading />;
 
@@ -913,6 +918,26 @@ export function RecipePage() {
           </div>
         )
       )}
+
+      {/* Important note */}
+      {isEditing && editData ? (
+        <div className="mb-4">
+          <label className="block text-xs font-medium text-gray-500 mb-1">
+            Belangrijke opmerking (wordt opvallend getoond)
+          </label>
+          <input
+            value={editData.importantNote}
+            onChange={(e) => updateEditField("importantNote", e.target.value)}
+            placeholder="Bijv. Linzen 8 uur van tevoren weken"
+            className="w-full px-3 py-2 rounded-lg border border-amber-300 bg-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent placeholder:text-amber-300"
+          />
+        </div>
+      ) : recipe.importantNote ? (
+        <div className="flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 mb-4">
+          <AlertTriangle size={18} className="text-amber-500 shrink-0 mt-0.5" />
+          <p className="text-sm font-medium text-amber-800">{recipe.importantNote}</p>
+        </div>
+      ) : null}
 
       {/* Ingredients */}
       {isEditing && editData ? (

@@ -1,6 +1,6 @@
 import type { ExternalRecipe } from "@kookos/shared";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Download, Leaf, Loader2, Search, Sparkles } from "lucide-react";
+import { Check, Download, Leaf, Loader2, Search, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button, EmptyState, Input, Loading, PageHeader } from "@/components/ui";
@@ -171,18 +171,29 @@ export function ExternalRecipesPage() {
                 >
                   Bekijk
                 </a>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleImport(recipe);
-                  }}
-                  disabled={importing !== null}
-                  className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-orange-600 border border-orange-200 rounded-lg hover:bg-orange-50 transition-colors disabled:opacity-50"
-                >
-                  <Sparkles className="w-3 h-3" />
-                  Import
-                </button>
+                {recipe.importedRecipeId ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/recipe/${recipe.importedRecipeId}`)}
+                    className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-green-600 border border-green-200 rounded-lg hover:bg-green-50 transition-colors"
+                  >
+                    <Check className="w-3 h-3" />
+                    Al geïmporteerd
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleImport(recipe);
+                    }}
+                    disabled={importing !== null}
+                    className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-orange-600 border border-orange-200 rounded-lg hover:bg-orange-50 transition-colors disabled:opacity-50"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    Import
+                  </button>
+                )}
               </div>
             </div>
           </div>

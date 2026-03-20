@@ -4,6 +4,10 @@ import { db } from "./db/index.js";
 import * as schema from "./db/schema.js";
 
 export const auth = betterAuth({
+  session: {
+    expiresIn: 60 * 60 * 24 * 365, // 1 jaar
+    updateAge: 60 * 60 * 24, // vernieuw elke 24 uur
+  },
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: {

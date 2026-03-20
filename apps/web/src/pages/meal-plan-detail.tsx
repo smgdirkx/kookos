@@ -11,6 +11,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-
 import { CSS } from "@dnd-kit/utilities";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   ArrowLeft,
   Calendar,
   GripVertical,
@@ -29,7 +30,8 @@ type MealPlanItem = {
   id: string;
   date: string;
   mealType: string;
-  recipe: { id: string; title: string };
+  checked: boolean;
+  recipe: { id: string; title: string; importantNote?: string };
 };
 
 type MealPlanDetail = {
@@ -101,6 +103,12 @@ function SortableItem({ item, onDelete }: { item: MealPlanItem; onDelete: (id: s
           <X size={14} />
         </button>
       </div>
+      {!item.checked && item.recipe.importantNote && (
+        <div className="flex items-center gap-1.5 mt-2 ml-8 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+          <AlertTriangle size={13} className="shrink-0" />
+          {item.recipe.importantNote}
+        </div>
+      )}
     </div>
   );
 }
