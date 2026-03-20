@@ -1,1 +1,1 @@
-ALTER TABLE "recipes" ADD COLUMN "important_note" text;
+ALTER TABLE "recipes" ADD COLUMN IF NOT EXISTS "important_note" text;
