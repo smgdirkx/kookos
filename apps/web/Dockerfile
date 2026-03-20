@@ -1,5 +1,6 @@
 FROM node:22-alpine AS builder
 WORKDIR /app
+ENV NODE_ENV=development
 COPY package.json package-lock.json turbo.json tsconfig.json ./
 COPY apps/web/package.json apps/web/tsconfig.json apps/web/
 COPY packages/shared/package.json packages/shared/tsconfig.json packages/shared/
