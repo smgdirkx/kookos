@@ -36,7 +36,7 @@ type Recipe = {
   prepTimeMinutes?: number;
   cookTimeMinutes?: number;
   ingredients?: { name: string }[];
-  images?: { url: string; isPrimary: boolean }[];
+  images?: { url: string; isPrimary: boolean; caption?: string }[];
   recipeTags?: { tag: { name: string } }[];
 };
 
@@ -290,13 +290,19 @@ export function RecipesPage() {
             <Link key={recipe.id} to={`/recipe/${recipe.id}`}>
               <Card interactive className="mb-3">
                 <div className="flex gap-3">
-                  {recipe.images?.[0] && (
-                    <img
-                      src={recipe.images[0].url}
-                      alt=""
-                      className="w-16 h-16 rounded-lg object-cover shrink-0"
-                    />
-                  )}
+                  {recipe.images?.length > 0 &&
+                    (() => {
+                      const displayImage =
+                        recipe.images.find((img) => img.caption !== "scan-original") ??
+                        recipe.images[0];
+                      return (
+                        <img
+                          src={displayImage.url}
+                          alt=""
+                          className="w-16 h-16 rounded-lg object-cover shrink-0"
+                        />
+                      );
+                    })()}
                   <div className="flex-1 min-w-0">
                     <h2 className="font-semibold text-lg">{recipe.title}</h2>
                     {recipe.description && (

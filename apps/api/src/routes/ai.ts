@@ -22,7 +22,11 @@ const recipeTool: Anthropic.Tool = {
     properties: {
       title: { type: "string", description: "Naam van het gerecht" },
       description: { type: "string", description: "Korte beschrijving" },
-      instructions: { type: "string", description: "Volledige bereidingswijze" },
+      instructions: {
+        type: "string",
+        description:
+          "Volledige bereidingswijze inclusief alle secties (tips, variaties, serveersuggesties, etc.) — er mag geen informatie verloren gaan",
+      },
       servings: { type: "number", description: "Aantal personen" },
       prepTimeMinutes: { type: "number", description: "Voorbereidingstijd in minuten" },
       cookTimeMinutes: { type: "number", description: "Kooktijd in minuten" },
@@ -128,12 +132,13 @@ function getToolInput(message: Anthropic.Message): unknown {
 
 const RECIPE_SYSTEM_PROMPT = `Je bent een recepten-expert. Analyseer het aangeboden recept en extraheer alle informatie.
 Gebruik Nederlandse taal voor alle tekst. Gebruik altijd de save_recipe tool om het resultaat terug te geven.
+BEREIDINGSWIJZE: Neem de VOLLEDIGE bereidingstekst over — inclusief alle secties zoals tips, variaties, serveersuggesties, opmerkingen en voedingsinfo. Er mag GEEN informatie verloren gaan. Als het origineel aparte secties heeft (bijv. "Variaties", "Tips"), behoud deze als duidelijke koppen in de tekst.
 Categoriseer elk ingrediënt op basis van de rol in het gerecht: hoofdgroenten (de groenten waar het gerecht om draait), aromaten (smaakmakers zoals ui, knoflook, kruiden), basis (pasta, rijst, aardappel), eiwitten (tofu, linzen, eieren, kaas), overig (olie, sauzen, bouillon).
 BELANGRIJK: Laat standaard keukenspullen zoals zout, peper, olie, olijfolie en boter WEG uit de ingrediëntenlijst. Die heeft iedereen al in huis.
 Bepaal ook de moeilijkheidsgraad: makkelijk (weinig stappen, basistechnieken), gemiddeld (meerdere technieken, timing belangrijk), moeilijk (geavanceerde technieken, veel stappen).
 
 SUGGESTIES:
-- Scan de bereidingstekst op ingrediënten die NIET in de ingrediëntenlijst staan (bijv. "serveer met rijst of noedels", "lekker met brood erbij"). Voeg deze toe met isSuggested=true.
+- Scan de VOLLEDIGE tekst — titel, beschrijving, ingrediëntenlijst, bereidingsstappen, tips, en serveersuggesties — op ALLE genoemde etenswaren/ingrediënten. ELKE eetbare suggestie die ergens in de tekst wordt genoemd (bijv. "serveer met rijst of noedels", "lekker met brood erbij", "eventueel wat feta erdoor", "top met pijnboompitten") MOET als apart ingrediënt in de ingrediëntenlijst komen met isSuggested=true. Sla er GEEN ENKELE over. Als er meerdere alternatieven worden gesuggereerd (bijv. "rijst of noedels"), voeg ze ALLEMAAL toe als aparte ingrediënten.
 - VERPLICHT: Controleer of het recept een basis (koolhydraat) en een eiwit bevat. Kijk in ZOWEL de ingrediëntenlijst als de bereidingstekst. Als een van deze categorieën volledig ontbreekt, MOET je minstens één passend ingrediënt suggereren met isSuggested=true. Een compleet gerecht heeft altijd een koolhydraat én een eiwitbron — sla dit NOOIT over.
 - Ingrediënten die WEL expliciet in de originele ingrediëntenlijst staan krijgen isSuggested=false (of laat het veld weg).`;
 
