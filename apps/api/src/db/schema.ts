@@ -195,6 +195,7 @@ export const mealPlanItems = pgTable("meal_plan_items", {
     .references(() => recipes.id, { onDelete: "cascade" }),
   date: date("date").notNull(),
   mealType: varchar("meal_type", { length: 20 }).notNull(),
+  checked: boolean("checked").notNull().default(false),
 });
 
 export const shoppingLists = pgTable("shopping_lists", {

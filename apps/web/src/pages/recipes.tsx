@@ -1,15 +1,6 @@
 import { type DifficultyLevel, difficultyLabels } from "@kookos/shared";
 import { useQuery } from "@tanstack/react-query";
-import {
-  BookOpen,
-  Clock,
-  Plus,
-  Search,
-  SlidersHorizontal,
-  Users,
-  UtensilsCrossed,
-  X,
-} from "lucide-react";
+import { BookOpen, Plus, Search, SlidersHorizontal, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -21,7 +12,6 @@ import {
   LinkButton,
   Loading,
   PageHeader,
-  Tag,
 } from "@/components/ui";
 import { api } from "@/lib/api";
 
@@ -39,12 +29,6 @@ type Recipe = {
   images?: { url: string; isPrimary: boolean; caption?: string }[];
   recipeTags?: { tag: { name: string } }[];
 };
-
-const difficultyVariant = {
-  makkelijk: "success",
-  gemiddeld: "warning",
-  moeilijk: "danger",
-} as const;
 
 export function RecipesPage() {
   const [query, setQuery] = useState("");
@@ -285,62 +269,46 @@ export function RecipesPage() {
       ) : !filtered?.length ? (
         <EmptyState icon={Search} title="Geen recepten gevonden" />
       ) : (
-        <div className="space-y-3">
-          {filtered.map((recipe) => (
-            <Link key={recipe.id} to={`/recipe/${recipe.id}`}>
-              <Card interactive className="mb-3">
-                <div className="flex gap-3">
-                  {recipe.images &&
-                    recipe.images.length > 0 &&
-                    (() => {
-                      const images = recipe.images;
-                      const displayImage =
-                        images.find((img) => img.caption !== "scan-original") ?? images[0];
-                      return (
-                        <img
-                          src={displayImage.url}
-                          alt=""
-                          className="w-16 h-16 rounded-lg object-cover shrink-0"
-                        />
-                      );
-                    })()}
-                  <div className="flex-1 min-w-0">
-                    <h2 className="font-semibold text-lg">{recipe.title}</h2>
-                    {recipe.description && (
-                      <p className="text-gray-500 text-sm mt-1 line-clamp-2">
-                        {recipe.description}
-                      </p>
+        <div className="flex flex-col gap-4">
+          {filtered.map((recipe) => {
+            const images = recipe.images ?? [];
+            const displayImage = images.find((img) => img.caption !== "scan-original") ?? images[0];
+            const meta: string[] = [];
+            if (recipe.prepTimeMinutes || recipe.cookTimeMinutes) {
+              const total = (recipe.prepTimeMinutes ?? 0) + (recipe.cookTimeMinutes ?? 0);
+              meta.push(`${total} min`);
+            }
+            if (recipe.difficulty) meta.push(difficultyLabels[recipe.difficulty]);
+
+            return (
+              <Link key={recipe.id} to={`/recipe/${recipe.id}`}>
+                <Card interactive padding="none" className="overflow-hidden">
+                  <div className="sm:flex">
+                    {displayImage && (
+                      <img
+                        src={displayImage.url}
+                        alt=""
+                        className="w-full h-36 sm:w-40 sm:h-28 object-cover shrink-0"
+                      />
                     )}
+                    <div className="px-4 py-3 flex-1 min-w-0">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <h2 className="font-semibold">{recipe.title}</h2>
+                        {meta.length > 0 && (
+                          <span className="text-xs text-gray-400 shrink-0">{meta.join(" · ")}</span>
+                        )}
+                      </div>
+                      {recipe.description && (
+                        <p className="text-gray-400 text-sm mt-1 line-clamp-3">
+                          {recipe.description}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
-                <div className="flex flex-wrap gap-2 mt-3">
-                  {recipe.servings && (
-                    <Tag>
-                      <Users size={12} className="mr-1" />
-                      {recipe.servings}
-                    </Tag>
-                  )}
-                  {recipe.cuisine && (
-                    <Tag variant="secondary">
-                      <UtensilsCrossed size={12} className="mr-1" />
-                      {recipe.cuisine}
-                    </Tag>
-                  )}
-                  {recipe.prepTimeMinutes && (
-                    <Tag>
-                      <Clock size={12} className="mr-1" />
-                      {recipe.prepTimeMinutes} min
-                    </Tag>
-                  )}
-                  {recipe.difficulty && (
-                    <Tag variant={difficultyVariant[recipe.difficulty]}>
-                      {difficultyLabels[recipe.difficulty]}
-                    </Tag>
-                  )}
-                </div>
-              </Card>
-            </Link>
-          ))}
+                </Card>
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>

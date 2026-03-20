@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button, Card, Input, Loading, PageHeader, Textarea } from "@/components/ui";
 import { api } from "@/lib/api";
+import { generateMealPlanName } from "@/lib/date";
 
 type MealPlanDay = {
   day: number;
@@ -52,6 +53,27 @@ export function MealPlanPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  async function createManualPlan() {
+    setSaving(true);
+    setError("");
+
+    try {
+      const saved = await api<{ id: string }>("/api/meal-plans", {
+        method: "POST",
+        body: {
+          name: generateMealPlanName(),
+          servings: parseInt(people, 10) || 2,
+          items: [],
+        },
+      });
+
+      navigate(`/meal-plans/${saved.id}`);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Aanmaken mislukt");
+    }
+    setSaving(false);
+  }
+
   async function generatePlan(e: React.FormEvent) {
     e.preventDefault();
     if (!ingredients.trim()) return;
@@ -85,13 +107,10 @@ export function MealPlanPage() {
     setError("");
 
     try {
-      const today = new Date();
-      const name = `Weekmenu ${today.toLocaleDateString("nl-NL", { day: "numeric", month: "short" })}`;
-
       const saved = await api<{ id: string }>("/api/meal-plans", {
         method: "POST",
         body: {
-          name,
+          name: generateMealPlanName(),
           servings: parseInt(people, 10) || 2,
           items: result.mealPlan.map((day) => ({
             recipeId: day.meals.dinner.recipeId,
@@ -151,6 +170,15 @@ export function MealPlanPage() {
         >
           {loading ? "Bezig met plannen..." : "Genereer weekmenu"}
         </Button>
+
+        <button
+          type="button"
+          onClick={createManualPlan}
+          disabled={saving}
+          className="block mx-auto text-sm text-gray-500 underline hover:text-gray-700"
+        >
+          {saving ? "Aanmaken..." : "Handmatig aanmaken"}
+        </button>
       </form>
 
       {error && <p className="text-danger text-sm mt-4">{error}</p>}

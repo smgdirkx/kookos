@@ -92,8 +92,38 @@ app.get("/", async (c) => {
   const result = await db.query.mealPlans.findMany({
     where: eq(mealPlans.userId, user.id),
     orderBy: (mealPlans, { desc }) => [desc(mealPlans.createdAt)],
+    with: { items: { with: { recipe: true } } },
   });
   return c.json(result);
+});
+
+// Get meal plans that contain a specific recipe
+app.get("/by-recipe/:recipeId", async (c) => {
+  const recipeId = c.req.param("recipeId");
+  const user = c.get("user")!;
+
+  const items = await db.query.mealPlanItems.findMany({
+    where: eq(mealPlanItems.recipeId, recipeId),
+    with: {
+      mealPlan: {
+        with: { items: { with: { recipe: true } } },
+      },
+    },
+  });
+
+  // Filter to user's plans and deduplicate
+  const planMap = new Map<string, (typeof items)[0]["mealPlan"]>();
+  for (const item of items) {
+    if (item.mealPlan.userId === user.id) {
+      planMap.set(item.mealPlan.id, item.mealPlan);
+    }
+  }
+
+  const plans = [...planMap.values()].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+
+  return c.json(plans);
 });
 
 // Get single meal plan with items and shopping list
@@ -131,7 +161,7 @@ app.post("/", async (c) => {
   // Calculate start/end dates from today
   const startDate = new Date();
   const endDate = new Date();
-  endDate.setDate(endDate.getDate() + items.length - 1);
+  endDate.setDate(endDate.getDate() + Math.max(items.length, 1) - 1);
 
   const [mealPlan] = await db
     .insert(mealPlans)
@@ -324,6 +354,29 @@ app.patch("/:id/items/reorder", async (c) => {
   }
 
   return c.json({ ok: true });
+});
+
+// Toggle item checked state
+app.patch("/:id/items/:itemId", async (c) => {
+  const id = c.req.param("id");
+  const itemId = c.req.param("itemId");
+  const user = c.get("user")!;
+  const body = await c.req.json();
+  const { checked } = body as { checked: boolean };
+
+  const plan = await db.query.mealPlans.findFirst({
+    where: sql`${mealPlans.id} = ${id} AND ${mealPlans.userId} = ${user.id}`,
+  });
+  if (!plan) return c.json({ error: "Not found" }, 404);
+
+  const [updated] = await db
+    .update(mealPlanItems)
+    .set({ checked })
+    .where(eq(mealPlanItems.id, itemId))
+    .returning();
+
+  if (!updated) return c.json({ error: "Item not found" }, 404);
+  return c.json(updated);
 });
 
 // Delete item from meal plan

@@ -138,49 +138,54 @@ export function ExternalRecipesPage() {
 
       <div className="space-y-3">
         {recipes.map((recipe) => (
-          <a
+          <div
             key={recipe.id}
-            href={recipe.sourceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex gap-3 bg-white rounded-xl border border-gray-200 overflow-hidden hover:border-orange-300 hover:bg-orange-50/30 transition-colors"
+            className="flex gap-3 bg-white rounded-xl border border-gray-200 overflow-hidden"
           >
             {recipe.imageUrl ? (
               <img
                 src={recipe.imageUrl}
                 alt={recipe.title}
-                className="w-24 h-24 object-cover flex-shrink-0"
+                className="w-24 self-stretch object-cover flex-shrink-0"
                 loading="lazy"
               />
             ) : (
-              <div className="w-24 h-24 bg-gray-100 flex items-center justify-center flex-shrink-0">
+              <div className="w-24 self-stretch bg-gray-100 flex items-center justify-center flex-shrink-0">
                 <Leaf className="w-8 h-8 text-gray-300" />
               </div>
             )}
             <div className="py-2 pr-3 min-w-0 flex-1">
-              <p className="font-semibold text-gray-900 truncate">{recipe.title}</p>
+              <p className="text-sm font-semibold text-gray-900">{recipe.title}</p>
               {recipe.category && <p className="text-xs text-gray-400 mt-0.5">{recipe.category}</p>}
               {recipe.description && (
                 <p className="text-sm text-gray-500 mt-1 line-clamp-2">
                   {recipe.description.replace(/<[^>]*>/g, "")}
                 </p>
               )}
+              <div className="flex gap-2 mt-2">
+                <a
+                  href={recipe.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Bekijk
+                </a>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleImport(recipe);
+                  }}
+                  disabled={importing !== null}
+                  className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-orange-600 border border-orange-200 rounded-lg hover:bg-orange-50 transition-colors disabled:opacity-50"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  Import
+                </button>
+              </div>
             </div>
-            <div className="flex items-center pr-3 flex-shrink-0">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  handleImport(recipe);
-                }}
-                disabled={importing !== null}
-                className="flex items-center gap-1.5 px-3 py-2 bg-orange-500 text-white text-xs font-semibold rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 shadow-sm"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                Import
-              </button>
-            </div>
-          </a>
+          </div>
         ))}
 
         {/* Infinite scroll sentinel */}
