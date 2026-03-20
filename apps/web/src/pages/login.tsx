@@ -7,8 +7,6 @@ import { useAuthStore } from "@/lib/auth";
 export function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
-  const [isRegister, setIsRegister] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const setAuth = useAuthStore((s) => s.setAuth);
@@ -20,16 +18,11 @@ export function LoginPage() {
     setLoading(true);
 
     try {
-      const endpoint = isRegister ? "/api/auth/sign-up/email" : "/api/auth/sign-in/email";
-
-      const body: Record<string, string> = { email, password };
-      if (isRegister) body.name = name;
-
-      const res = await fetch(endpoint, {
+      const res = await fetch("/api/auth/sign-in/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(body),
+        body: JSON.stringify({ email, password }),
       });
 
       const data = await res.json();
@@ -55,15 +48,6 @@ export function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-3">
-          {isRegister && (
-            <Input
-              type="text"
-              placeholder="Naam"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
-          )}
           <Input
             type="email"
             placeholder="E-mailadres"
@@ -82,17 +66,9 @@ export function LoginPage() {
           {error && <p className="text-danger text-sm text-center">{error}</p>}
 
           <Button type="submit" variant="cta" size="lg" fullWidth disabled={loading}>
-            {loading ? "Laden..." : isRegister ? "Registreren" : "Inloggen"}
+            {loading ? "Laden..." : "Inloggen"}
           </Button>
         </form>
-
-        <button
-          type="button"
-          onClick={() => setIsRegister(!isRegister)}
-          className="w-full text-primary text-sm mt-4 text-center hover:underline"
-        >
-          {isRegister ? "Al een account? Inloggen" : "Nieuw? Maak een account"}
-        </button>
       </div>
     </div>
   );

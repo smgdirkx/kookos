@@ -14,7 +14,7 @@
     "check": "biome check .",
     "check:fix": "biome check --write .",
     "typecheck": "turbo typecheck",
-    "prepare": "husky"
+    "prepare": "husky || true"
   },
   "packageManager": "npm@11.6.2",
   "lint-staged": {

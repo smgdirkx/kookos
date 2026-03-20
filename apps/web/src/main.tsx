@@ -5,6 +5,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Layout } from "@/components/layout";
 import { useAuthStore } from "@/lib/auth";
 import { AddRecipePage } from "@/pages/add-recipe";
+import { AddUserPage } from "@/pages/add-user";
 import { ExternalRecipesPage } from "@/pages/external-recipes";
 import { LoginPage } from "@/pages/login";
 import { MealPlanPage } from "@/pages/meal-plan";
@@ -42,6 +43,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="meal-plan/new" element={<MealPlanPage />} />
             <Route path="add-recipe" element={<AddRecipePage />} />
             <Route path="add-recipe/groentenabonnement" element={<ExternalRecipesPage />} />
+            <Route path="add-recipe/gebruiker" element={<AddUserPage />} />
           </Route>
         </Routes>
       </BrowserRouter>

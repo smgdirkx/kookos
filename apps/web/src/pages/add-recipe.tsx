@@ -1,5 +1,14 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { BookOpen, Camera, Globe, ImagePlus, Leaf, Link as LinkIcon, Sparkles } from "lucide-react";
+import {
+  BookOpen,
+  Camera,
+  Globe,
+  ImagePlus,
+  Leaf,
+  Link as LinkIcon,
+  Sparkles,
+  UserPlus,
+} from "lucide-react";
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button, Input, Loading, PageHeader } from "@/components/ui";
@@ -76,7 +85,7 @@ export function AddRecipePage() {
 
   return (
     <div>
-      <PageHeader title="Recept toevoegen" back={step !== "choose" ? handleBack : undefined} />
+      <PageHeader title="Toevoegen" back={step !== "choose" ? handleBack : undefined} />
 
       {loading && <Loading message={status} />}
 
@@ -121,6 +130,22 @@ export function AddRecipePage() {
             <div>
               <p className="font-semibold text-gray-900">Groentenabonnement</p>
               <p className="text-sm text-gray-500">Kies uit 200+ recepten</p>
+            </div>
+          </button>
+
+          <div className="border-t border-gray-200 my-3" />
+
+          <button
+            type="button"
+            onClick={() => navigate("/add-recipe/gebruiker")}
+            className="w-full flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-200 hover:border-orange-300 hover:bg-orange-50/50 transition-colors text-left"
+          >
+            <div className="flex-shrink-0 w-12 h-12 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center">
+              <UserPlus className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="font-semibold text-gray-900">Gebruiker toevoegen</p>
+              <p className="text-sm text-gray-500">Maak een nieuw account aan</p>
             </div>
           </button>
         </div>
