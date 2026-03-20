@@ -97,7 +97,7 @@ export const recipes = pgTable(
     source: varchar("source", { length: 20 }), // "scan", "url", "manual"
     sourceUrl: text("source_url"),
     notes: text("notes"),
-    importantNote: text("important_note"),
+
     isFavorite: boolean("is_favorite").notNull().default(true),
     searchVector: tsvector("search_vector"),
     createdAt: timestamp("created_at").notNull().defaultNow(),

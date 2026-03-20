@@ -65,7 +65,6 @@ export const createRecipeSchema = z.object({
   source: z.enum(["scan", "url", "manual"]).optional(),
   sourceUrl: z.string().url().optional(),
   notes: z.string().optional(),
-  importantNote: z.string().optional(),
   ingredients: z.array(recipeIngredientSchema).optional(),
   tags: z.array(z.string()).optional(),
 });
@@ -127,6 +126,10 @@ export const scanRecipeSchema = z.object({
   mediaType: z.string(), // origineel MIME type van de afbeelding
 });
 
+export const pasteRecipeSchema = z.object({
+  text: z.string().min(10),
+});
+
 export const generateMealPlanSchema = z.object({
   availableIngredients: z.array(z.string()),
   numberOfPeople: z.number().int().positive().default(2),
@@ -172,4 +175,5 @@ export type CreateComment = z.infer<typeof createCommentSchema>;
 export type UpdateComment = z.infer<typeof updateCommentSchema>;
 export type ImportRecipe = z.infer<typeof importRecipeSchema>;
 export type ScanRecipe = z.infer<typeof scanRecipeSchema>;
+export type PasteRecipe = z.infer<typeof pasteRecipeSchema>;
 export type GenerateMealPlan = z.infer<typeof generateMealPlanSchema>;

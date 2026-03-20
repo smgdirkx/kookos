@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Button, Card, Input, Loading, useConfirm } from "@/components/ui";
+import { Button, Card, Input, Loading, RecipePlaceholder, useConfirm } from "@/components/ui";
 import { api } from "@/lib/api";
 
 type RecipeImage = { id: string; url: string; caption?: string | null };
@@ -33,7 +33,12 @@ type MealPlanItem = {
   date: string;
   mealType: string;
   checked: boolean;
-  recipe: { id: string; title: string; importantNote?: string; images?: RecipeImage[] };
+  recipe: {
+    id: string;
+    title: string;
+    images?: RecipeImage[];
+    comments?: { id: string; content: string; isImportant: boolean }[];
+  };
 };
 
 type MealPlanDetail = {
@@ -94,12 +99,14 @@ function SortableItem({ item, onDelete }: { item: MealPlanItem; onDelete: (id: s
           <GripVertical size={16} />
         </button>
         <span className="text-xs font-medium text-gray-400 uppercase w-6">{dayName}</span>
-        {displayImage && (
+        {displayImage ? (
           <img
             src={displayImage.url}
             alt=""
-            className="w-10 h-10 rounded-lg object-cover shrink-0"
+            className="w-11 h-11 rounded-lg object-cover shrink-0"
           />
+        ) : (
+          <RecipePlaceholder className="w-11 h-11 rounded-lg shrink-0" variant="hero" />
         )}
         <Link
           to={`/recipe/${item.recipe.id}`}
@@ -115,12 +122,18 @@ function SortableItem({ item, onDelete }: { item: MealPlanItem; onDelete: (id: s
           <X size={14} />
         </button>
       </div>
-      {!item.checked && item.recipe.importantNote && (
-        <div className="flex items-center gap-1.5 mt-2 ml-8 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
-          <AlertTriangle size={13} className="shrink-0" />
-          {item.recipe.importantNote}
-        </div>
-      )}
+      {!item.checked &&
+        item.recipe.comments
+          ?.filter((c) => c.isImportant)
+          .map((c) => (
+            <div
+              key={c.id}
+              className="flex items-center gap-1.5 mt-2 ml-8 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5"
+            >
+              <AlertTriangle size={13} className="shrink-0" />
+              {c.content}
+            </div>
+          ))}
     </div>
   );
 }
@@ -332,12 +345,14 @@ export function MealPlanDetailPage() {
                   disabled={addItemMutation.isPending}
                   className="w-full flex items-center gap-2.5 text-left px-3 py-2 text-sm hover:bg-gray-50 rounded-lg transition-colors"
                 >
-                  {img && (
+                  {img ? (
                     <img
                       src={img.url}
                       alt=""
-                      className="w-8 h-8 rounded-md object-cover shrink-0"
+                      className="w-11 h-11 rounded-lg object-cover shrink-0"
                     />
+                  ) : (
+                    <RecipePlaceholder className="w-11 h-11 rounded-lg shrink-0" variant="hero" />
                   )}
                   {recipe.title}
                 </button>

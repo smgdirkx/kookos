@@ -57,6 +57,13 @@
       "when": 1774021229746,
       "tag": "0007_eager_luke_cage",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1774032172336,
+      "tag": "0008_small_excalibur",
+      "breakpoints": true
     }
   ]
 }

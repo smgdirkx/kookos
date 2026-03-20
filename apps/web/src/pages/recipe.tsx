@@ -27,7 +27,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { TagInput } from "@/components/tag-input";
-import { Button, Card, Input, Loading, Textarea, useConfirm } from "@/components/ui";
+import {
+  Button,
+  Card,
+  Input,
+  Loading,
+  RecipePlaceholder,
+  Textarea,
+  useConfirm,
+} from "@/components/ui";
 import { api } from "@/lib/api";
 import { generateMealPlanName } from "@/lib/date";
 import { compressImage } from "@/lib/image";
@@ -68,7 +76,7 @@ type Recipe = {
   category?: string;
   difficulty?: DifficultyLevel;
   notes?: string;
-  importantNote?: string;
+
   source?: string;
   sourceUrl?: string;
   ingredients: Ingredient[];
@@ -84,7 +92,7 @@ type EditData = {
   prepTimeMinutes: number | undefined;
   cookTimeMinutes: number | undefined;
   difficulty: DifficultyLevel | undefined;
-  importantNote: string;
+
   ingredients: Ingredient[];
 };
 
@@ -97,7 +105,7 @@ function recipeToEditData(recipe: Recipe): EditData {
     prepTimeMinutes: recipe.prepTimeMinutes,
     cookTimeMinutes: recipe.cookTimeMinutes,
     difficulty: recipe.difficulty,
-    importantNote: recipe.importantNote ?? "",
+
     ingredients: recipe.ingredients.map((ing) => ({ ...ing })),
   };
 }
@@ -487,7 +495,7 @@ export function RecipePage() {
           prepTimeMinutes: data.prepTimeMinutes,
           cookTimeMinutes: data.cookTimeMinutes,
           difficulty: data.difficulty,
-          importantNote: data.importantNote || undefined,
+
           ingredients: data.ingredients.map((ing, i) => ({
             name: ing.name,
             amount: ing.amount || undefined,
@@ -693,7 +701,7 @@ export function RecipePage() {
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/20 text-white text-sm font-medium hover:bg-white/30 transition-colors"
               >
                 <CalendarPlus size={16} />
-                Toevoegen aan weekmenu
+                <span className="hidden sm:inline">Toevoegen aan </span>Weekmenu
               </button>
               <div className="flex-1" />
               <button
@@ -727,24 +735,24 @@ export function RecipePage() {
           )}
         </div>
       ) : (
-        <>
-          {/* Action bar without image - colored bar */}
-          {!isEditing ? (
-            <div className="-mx-4 -mt-6 mb-5 flex items-center px-4 py-2 bg-primary">
-              <button
-                type="button"
-                onClick={() => navigate(-1)}
-                className="p-2 rounded-full text-white/90 hover:bg-white/15 transition-colors"
-              >
-                <ArrowLeft size={20} />
-              </button>
+        <div className="relative -mx-4 -mt-6 mb-5">
+          <RecipePlaceholder className="w-full h-48" variant="hero" />
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="absolute top-4 left-4 w-9 h-9 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors"
+          >
+            <ArrowLeft size={18} />
+          </button>
+          {!isEditing && (
+            <div className="absolute bottom-0 inset-x-0 flex items-center gap-3 px-4 py-2.5 bg-black/15 backdrop-blur-md">
               <button
                 type="button"
                 onClick={() => setShowAddToMealPlan(true)}
-                className="inline-flex items-center gap-1.5 ml-2 px-3 py-1.5 rounded-full bg-white/20 text-white text-sm font-medium hover:bg-white/30 transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/20 text-white text-sm font-medium hover:bg-white/30 transition-colors"
               >
                 <CalendarPlus size={16} />
-                Toevoegen aan weekmenu
+                <span className="hidden sm:inline">Toevoegen aan </span>Weekmenu
               </button>
               <div className="flex-1" />
               <button
@@ -775,17 +783,8 @@ export function RecipePage() {
                 )}
               </button>
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => navigate(-1)}
-              className="inline-flex items-center gap-1.5 text-primary text-sm mb-4 hover:underline"
-            >
-              <ArrowLeft size={16} />
-              Terug
-            </button>
           )}
-        </>
+        </div>
       )}
 
       <input
@@ -935,15 +934,9 @@ export function RecipePage() {
         )
       )}
 
-      {/* Important notes (from comments + legacy importantNote field) */}
+      {/* Important notes (from comments) */}
       {!isEditing && (
         <>
-          {recipe.importantNote && (
-            <div className="flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 mb-2">
-              <AlertTriangle size={18} className="text-amber-500 shrink-0 mt-0.5" />
-              <p className="text-sm font-medium text-amber-800">{recipe.importantNote}</p>
-            </div>
-          )}
           {comments
             .filter((c) => c.isImportant)
             .map((c) => (
@@ -955,23 +948,8 @@ export function RecipePage() {
                 <p className="text-sm font-medium text-amber-800">{c.content}</p>
               </div>
             ))}
-          {(recipe.importantNote || comments.some((c) => c.isImportant)) && (
-            <div className="mb-2" />
-          )}
+          {comments.some((c) => c.isImportant) && <div className="mb-2" />}
         </>
-      )}
-      {isEditing && editData && (
-        <div className="mb-4">
-          <label className="block text-xs font-medium text-gray-500 mb-1">
-            Belangrijke opmerking (wordt opvallend getoond)
-          </label>
-          <input
-            value={editData.importantNote}
-            onChange={(e) => updateEditField("importantNote", e.target.value)}
-            placeholder="Bijv. Linzen 8 uur van tevoren weken"
-            className="w-full px-3 py-2 rounded-lg border border-amber-300 bg-amber-50 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent placeholder:text-amber-300"
-          />
-        </div>
       )}
 
       {/* Ingredients */}

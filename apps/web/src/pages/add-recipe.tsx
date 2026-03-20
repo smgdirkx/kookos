@@ -1,18 +1,28 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { BookOpen, Camera, Globe, ImagePlus, Leaf, Link as LinkIcon, Sparkles } from "lucide-react";
+import {
+  BookOpen,
+  Camera,
+  ClipboardPaste,
+  Globe,
+  ImagePlus,
+  Leaf,
+  Link as LinkIcon,
+  Sparkles,
+} from "lucide-react";
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button, Input, Loading, PageHeader } from "@/components/ui";
+import { Button, Input, Loading, PageHeader, Textarea } from "@/components/ui";
 import { api } from "@/lib/api";
 import { compressImage } from "@/lib/image";
 
-type Step = "choose" | "scan" | "import";
+type Step = "choose" | "scan" | "import" | "paste";
 
 export function AddRecipePage() {
   const [step, setStep] = useState<Step>("choose");
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
   const [url, setUrl] = useState("");
+  const [pasteText, setPasteText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -68,9 +78,35 @@ export function AddRecipePage() {
     }
   }
 
+  async function handlePaste(e: React.FormEvent) {
+    e.preventDefault();
+    if (!pasteText.trim()) return;
+    setLoading(true);
+    setStatus("Tekst analyseren met AI...");
+
+    try {
+      const recipe = await api<Record<string, unknown>>("/api/ai/paste", {
+        method: "POST",
+        body: { text: pasteText },
+      });
+
+      const saved = await api<{ id: string }>("/api/recipes", {
+        method: "POST",
+        body: { ...recipe, source: "manual" },
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["recipes"] });
+      navigate(`/recipe/${saved.id}`, { replace: true });
+    } catch (err: unknown) {
+      setStatus(`Fout: ${err instanceof Error ? err.message : "Onbekende fout"}`);
+      setLoading(false);
+    }
+  }
+
   function handleBack() {
     setStep("choose");
     setUrl("");
+    setPasteText("");
     setStatus("");
   }
 
@@ -107,6 +143,20 @@ export function AddRecipePage() {
             <div>
               <p className="font-semibold text-gray-900">Importeer van website</p>
               <p className="text-sm text-gray-500">Plak een URL van een receptensite</p>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setStep("paste")}
+            className="w-full flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-200 hover:border-orange-300 hover:bg-orange-50/50 transition-colors text-left"
+          >
+            <div className="flex-shrink-0 w-12 h-12 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center">
+              <ClipboardPaste className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="font-semibold text-gray-900">Tekst plakken</p>
+              <p className="text-sm text-gray-500">Plak de tekst van een recept</p>
             </div>
           </button>
 
@@ -193,6 +243,29 @@ export function AddRecipePage() {
               disabled={!url.trim()}
             >
               Importeer recept
+            </Button>
+          </form>
+        </section>
+      )}
+
+      {!loading && step === "paste" && (
+        <section>
+          <form onSubmit={handlePaste} className="space-y-3">
+            <Textarea
+              placeholder="Plak hier de tekst van je recept..."
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+              rows={10}
+            />
+            <Button
+              type="submit"
+              variant="primary"
+              size="lg"
+              fullWidth
+              icon={Sparkles}
+              disabled={pasteText.trim().length < 10}
+            >
+              Verwerk recept
             </Button>
           </form>
         </section>

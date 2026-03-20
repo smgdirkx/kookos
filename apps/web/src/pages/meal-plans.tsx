@@ -1,7 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CalendarDays, Check, Plus } from "lucide-react";
+import { AlertTriangle, CalendarDays, Check, Clock, Pencil, Plus } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Card, EmptyState, LinkButton, Loading, PageHeader } from "@/components/ui";
+import {
+  Card,
+  EmptyState,
+  LinkButton,
+  Loading,
+  PageHeader,
+  RecipePlaceholder,
+} from "@/components/ui";
 import { api } from "@/lib/api";
 
 type RecipeImage = { id: string; url: string; caption?: string | null };
@@ -13,7 +20,9 @@ type MealPlanItem = {
   recipe: {
     id: string;
     title: string;
-    importantNote?: string;
+    prepTimeMinutes?: number | null;
+    cookTimeMinutes?: number | null;
+    difficulty?: string | null;
     images?: RecipeImage[];
     comments?: { id: string; content: string; isImportant: boolean }[];
   };
@@ -41,6 +50,10 @@ function CheckableItem({
   const d = new Date(item.date);
   const imgs = item.recipe.images ?? [];
   const displayImage = imgs.find((img) => img.caption !== "scan-original") ?? imgs[0];
+  const totalTime =
+    item.recipe.prepTimeMinutes || item.recipe.cookTimeMinutes
+      ? (item.recipe.prepTimeMinutes ?? 0) + (item.recipe.cookTimeMinutes ?? 0)
+      : null;
 
   return (
     <div
@@ -60,8 +73,10 @@ function CheckableItem({
       <span className="text-xs font-medium text-gray-400 uppercase w-5">
         {dayNames[d.getDay()]}
       </span>
-      {displayImage && (
-        <img src={displayImage.url} alt="" className="w-8 h-8 rounded-md object-cover shrink-0" />
+      {displayImage ? (
+        <img src={displayImage.url} alt="" className="w-11 h-11 rounded-lg object-cover shrink-0" />
+      ) : (
+        <RecipePlaceholder className="w-11 h-11 rounded-lg shrink-0" variant="hero" />
       )}
       <div className="flex-1 min-w-0">
         <Link
@@ -70,14 +85,21 @@ function CheckableItem({
         >
           {item.recipe.title}
         </Link>
+        {!item.checked && (totalTime || item.recipe.difficulty) && (
+          <p className="text-xs text-gray-400 flex items-center gap-1.5">
+            {totalTime && (
+              <span className="inline-flex items-center gap-0.5">
+                <Clock size={10} />
+                {totalTime} min
+              </span>
+            )}
+            {totalTime && item.recipe.difficulty && <span>·</span>}
+            {item.recipe.difficulty && <span>{item.recipe.difficulty}</span>}
+          </p>
+        )}
         {!item.checked &&
           (() => {
-            const notes = [
-              ...(item.recipe.importantNote
-                ? [{ id: "legacy", content: item.recipe.importantNote }]
-                : []),
-              ...(item.recipe.comments?.filter((c) => c.isImportant) ?? []),
-            ];
+            const notes = item.recipe.comments?.filter((c) => c.isImportant) ?? [];
             if (!notes.length) return null;
             return (
               <div className="flex flex-wrap gap-1 mt-0.5">
@@ -172,26 +194,25 @@ export function MealPlansPage() {
             const sortedItems = [...plan.items].sort(
               (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
             );
-            const unchecked = sortedItems.filter((i) => !i.checked);
-            const allDone = sortedItems.length > 0 && unchecked.length === 0;
 
             return (
               <Card key={plan.id}>
-                <Link to={`/meal-plans/${plan.id}`}>
-                  <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Link to={`/meal-plans/${plan.id}`} className="flex-1 min-w-0">
                     <h2 className="font-semibold">{plan.name}</h2>
-                    {allDone && (
-                      <span className="text-xs text-success font-medium flex items-center gap-1">
-                        <Check size={14} />
-                        Klaar
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-400 mt-1">
-                    {formatDate(plan.startDate)} – {formatDate(plan.endDate)} · {plan.servings}{" "}
-                    personen
-                  </p>
-                </Link>
+                    <p className="text-sm text-gray-400 mt-1">
+                      {formatDate(plan.startDate)} – {formatDate(plan.endDate)} · {plan.servings}{" "}
+                      personen
+                    </p>
+                  </Link>
+                  <Link
+                    to={`/meal-plans/${plan.id}`}
+                    className="shrink-0 p-2 text-gray-400 hover:text-primary transition-colors"
+                    aria-label="Weekmenu bewerken"
+                  >
+                    <Pencil size={16} />
+                  </Link>
+                </div>
 
                 {sortedItems.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-gray-100">

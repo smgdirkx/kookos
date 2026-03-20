@@ -1,14 +1,29 @@
-import { Save, Sparkles } from "lucide-react";
+import { Clock, Save, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Button, Card, Input, Loading, PageHeader, Textarea } from "@/components/ui";
+import {
+  Button,
+  Card,
+  Input,
+  Loading,
+  PageHeader,
+  RecipePlaceholder,
+  Textarea,
+} from "@/components/ui";
 import { api } from "@/lib/api";
 import { generateMealPlanName } from "@/lib/date";
 
-type RecipeOption = { recipeId: string; title: string; imageUrl?: string };
+type RecipeOption = {
+  recipeId: string;
+  title: string;
+  imageUrl?: string;
+  totalTimeMinutes?: number;
+  difficulty?: string;
+};
 
 type MealPlanDay = {
   day: number;
+  ingredient?: string;
   options: RecipeOption[];
 };
 
@@ -231,7 +246,10 @@ export function MealPlanPage() {
 
               return (
                 <Card key={day.day}>
-                  <p className="text-xs font-medium text-gray-400 uppercase mb-2">Dag {day.day}</p>
+                  <p className="text-xs font-medium text-gray-400 uppercase mb-2">
+                    Dag {day.day}
+                    {day.ingredient ? ` — ${day.ingredient}` : ""}
+                  </p>
                   <div className="flex flex-col gap-1.5">
                     {day.options.map((option, idx) => (
                       <button
@@ -245,20 +263,39 @@ export function MealPlanPage() {
                         }`}
                       >
                         {radioButton(idx === selected)}
-                        {option.imageUrl && (
+                        {option.imageUrl ? (
                           <img
                             src={option.imageUrl}
                             alt=""
                             className="w-10 h-10 rounded-lg object-cover shrink-0"
                           />
+                        ) : (
+                          <RecipePlaceholder
+                            className="w-10 h-10 rounded-lg shrink-0"
+                            variant="hero"
+                          />
                         )}
-                        <Link
-                          to={`/recipe/${option.recipeId}`}
-                          onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                          className="text-sm font-medium hover:underline"
-                        >
-                          {option.title}
-                        </Link>
+                        <div className="min-w-0">
+                          <Link
+                            to={`/recipe/${option.recipeId}`}
+                            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                            className="text-sm font-medium hover:underline"
+                          >
+                            {option.title}
+                          </Link>
+                          {(option.totalTimeMinutes || option.difficulty) && (
+                            <p className="text-xs text-gray-400 flex items-center gap-1.5 mt-0.5">
+                              {option.totalTimeMinutes && (
+                                <span className="inline-flex items-center gap-0.5">
+                                  <Clock size={10} />
+                                  {option.totalTimeMinutes} min
+                                </span>
+                              )}
+                              {option.totalTimeMinutes && option.difficulty && <span>·</span>}
+                              {option.difficulty && <span>{option.difficulty}</span>}
+                            </p>
+                          )}
+                        </div>
                       </button>
                     ))}
                     <button

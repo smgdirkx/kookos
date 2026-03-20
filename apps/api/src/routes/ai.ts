@@ -1,5 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { generateMealPlanSchema, importRecipeSchema, scanRecipeSchema } from "@kookos/shared";
+import {
+  generateMealPlanSchema,
+  importRecipeSchema,
+  pasteRecipeSchema,
+  scanRecipeSchema,
+} from "@kookos/shared";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../db/index.js";
@@ -87,6 +92,11 @@ const mealPlanTool: Anthropic.Tool = {
           type: "object",
           properties: {
             day: { type: "number" },
+            ingredient: {
+              type: "string",
+              description:
+                "De hoofdgroente(n) voor deze dag, bijv. 'Knolselderij' of 'Champignon & Wortel'",
+            },
             options: {
               type: "array",
               description: "1-3 receptopties voor deze dag, gesorteerd op hoe goed ze passen",
@@ -100,7 +110,7 @@ const mealPlanTool: Anthropic.Tool = {
               },
             },
           },
-          required: ["day", "options"],
+          required: ["day", "ingredient", "options"],
         },
       },
     },
@@ -234,6 +244,30 @@ app.post("/import", async (c) => {
   return c.json(recipe);
 });
 
+// Parse recipe from pasted text
+app.post("/paste", async (c) => {
+  const body = await c.req.json();
+  const parsed = pasteRecipeSchema.safeParse(body);
+  if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
+
+  const message = await anthropic.messages.create({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 4096,
+    system: RECIPE_SYSTEM_PROMPT,
+    tools: [recipeTool],
+    tool_choice: { type: "tool", name: "save_recipe" },
+    messages: [
+      {
+        role: "user",
+        content: `Extraheer het recept uit de volgende tekst:\n\n${parsed.data.text}`,
+      },
+    ],
+  });
+
+  logAi("paste", parsed.data.text.slice(0, 100), message);
+  return c.json(getToolInput(message));
+});
+
 // Generate meal plan with available ingredients
 app.post("/meal-plan", async (c) => {
   const user = c.get("user")!;
@@ -253,13 +287,19 @@ app.post("/meal-plan", async (c) => {
     ingredients: r.ingredients?.map((i) => i.name).join(", "),
   }));
 
-  // Build image lookup for enriching AI response
+  // Build lookups for enriching AI response
   const s3Base = process.env.S3_PUBLIC_URL || "/images/kookos";
   const recipeImageMap = new Map<string, string>();
+  const recipeMetaMap = new Map<string, { totalTimeMinutes?: number; difficulty?: string }>();
   for (const r of userRecipes) {
     const imgs = r.images ?? [];
     const display = imgs.find((img) => img.caption !== "scan-original") ?? imgs[0];
     if (display) recipeImageMap.set(r.id, `${s3Base}/${display.url}`);
+    const totalTime =
+      r.prepTimeMinutes || r.cookTimeMinutes
+        ? (r.prepTimeMinutes ?? 0) + (r.cookTimeMinutes ?? 0)
+        : undefined;
+    recipeMetaMap.set(r.id, { totalTimeMinutes: totalTime, difficulty: r.difficulty ?? undefined });
   }
 
   const message = await anthropic.messages.create({
@@ -273,6 +313,8 @@ Als er niet genoeg recepten zijn, herhaal dan recepten of gebruik minder dagen.
 
 OPTIES PER DAG: Geef per dag 2-3 receptopties als er genoeg recepten beschikbaar zijn, zodat de gebruiker kan kiezen. Sorteer de opties op hoe goed ze passen bij de beschikbare ingrediënten (beste match eerst). Als er te weinig recepten zijn voor meerdere opties, geef dan 1 optie.
 Probeer recepten niet te herhalen over opties heen — bied zoveel mogelijk variatie.
+
+INGREDIENT PER DAG: Geef per dag aan welke hoofdgroente(n) uit de beschikbare ingrediënten centraal staan. Bijv. als de gebruiker "knolselderij, champignon, wortel" heeft ingevuld, kan dag 1 "Knolselderij" zijn en dag 2 "Champignon & Wortel". Verdeel de ingrediënten logisch over de dagen.
 
 Gebruik altijd de save_meal_plan tool om het resultaat terug te geven.`,
     tools: [mealPlanTool],
@@ -293,14 +335,18 @@ ${JSON.stringify(recipeSummaries, null, 2)}`,
 
   logAi("meal-plan", parsed.data.availableIngredients.join(", "), message);
 
-  // Enrich AI response with recipe images
+  // Enrich AI response with recipe images and metadata
   const aiResult = getToolInput(message) as {
-    mealPlan: { day: number; options: { recipeId: string; title: string }[] }[];
+    mealPlan: { day: number; ingredient: string; options: { recipeId: string; title: string }[] }[];
   };
   for (const day of aiResult.mealPlan) {
     for (const option of day.options) {
+      const ext = option as Record<string, unknown>;
       const imageUrl = recipeImageMap.get(option.recipeId);
-      if (imageUrl) (option as Record<string, unknown>).imageUrl = imageUrl;
+      if (imageUrl) ext.imageUrl = imageUrl;
+      const meta = recipeMetaMap.get(option.recipeId);
+      if (meta?.totalTimeMinutes) ext.totalTimeMinutes = meta.totalTimeMinutes;
+      if (meta?.difficulty) ext.difficulty = meta.difficulty;
     }
   }
 

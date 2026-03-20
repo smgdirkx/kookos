@@ -9,5 +9,6 @@ export { Input } from "./input";
 export { LinkButton } from "./link-button";
 export { Loading } from "./loading";
 export { PageHeader } from "./page-header";
+export { RecipePlaceholder } from "./recipe-placeholder";
 export { Tag } from "./tag";
 export { Textarea } from "./textarea";
