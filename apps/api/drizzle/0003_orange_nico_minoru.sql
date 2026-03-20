@@ -1,0 +1,1 @@
+ALTER TABLE "recipe_ingredients" ADD COLUMN "is_suggested" boolean DEFAULT false NOT NULL;

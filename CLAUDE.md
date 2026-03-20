@@ -75,6 +75,7 @@ packages/shared/src/
 - **Auth**: Alle routes behalve `/health` en `/api/auth/**` vereisen sessie
 - **Hono typing**: Routes gebruiken `new Hono<AppEnv>()` en `c.get("user")!`
 - **Database**: Schema wijzigingen via Drizzle → `db:generate` → commit migratie
+- **DB migraties**: Lokaal wordt `db:push` gebruikt (geen migration tracking). Op de server draait `db:migrate:run` (migrate.ts): eerst Drizzle migraties, daarna tsvector triggers. Triggers staan in `migrate.ts` en worden idempotent toegepast. Lokaal na `db:push` moet je triggers handmatig toepassen via `db:migrate:run` of direct in psql
 - **Search**: tsvector met Dutch dictionary, weighted (A=titel, B=beschrijving+ingrediënten, C=keuken+categorie)
 - **AI prompts**: Nederlands, output altijd strict JSON
 - **Env**: `.env` in project root, niet in workspaces

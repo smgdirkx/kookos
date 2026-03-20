@@ -48,6 +48,7 @@ export const recipeIngredientSchema = z.object({
   unit: z.string().optional(),
   category: z.enum(ingredientCategories).optional(),
   isOptional: z.boolean().default(false),
+  isSuggested: z.boolean().default(false),
   sortOrder: z.number().int().nonnegative().default(0),
 });
 
@@ -129,6 +130,30 @@ export const generateMealPlanSchema = z.object({
   numberOfDays: z.number().int().positive().default(5),
   preferences: z.string().optional(),
 });
+
+// ── External recipe schemas ──
+
+export const searchExternalRecipesSchema = z.object({
+  query: z.string().optional(),
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(50).default(20),
+});
+
+export type SearchExternalRecipes = z.infer<typeof searchExternalRecipesSchema>;
+
+export type ExternalRecipe = {
+  id: string;
+  slug: string;
+  sourceUrl: string;
+  title: string;
+  description: string | null;
+  imageUrl: string | null;
+  author: string | null;
+  category: string | null;
+  ingredientsText: string | null;
+  instructionsText: string | null;
+  publishedAt: string | null;
+};
 
 // ── Type exports ──
 

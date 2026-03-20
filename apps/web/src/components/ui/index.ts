@@ -1,6 +1,7 @@
 export { Badge } from "./badge";
 export { Button } from "./button";
 export { Card } from "./card";
+export { ConfirmModal, useConfirm } from "./confirm-modal";
 export { EmptyState } from "./empty-state";
 export { FilterChip } from "./filter-chip";
 export { IconButton } from "./icon-button";

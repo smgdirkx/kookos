@@ -11,6 +11,36 @@ const ALLOWED_EXTENSIONS: Record<string, string> = {
 };
 
 /**
+ * Uploads a base64-encoded image to S3.
+ * Returns the S3 key, or null if the upload fails.
+ */
+export async function uploadBase64Image(
+  base64: string,
+  mediaType: string,
+  recipeId: string,
+): Promise<string | null> {
+  try {
+    const ext = ALLOWED_EXTENSIONS[mediaType] ?? "jpeg";
+    const buffer = Buffer.from(base64, "base64");
+    const key = `recipes/${recipeId}/${crypto.randomUUID()}.${ext}`;
+
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: S3_BUCKET,
+        Key: key,
+        Body: buffer,
+        ContentType: mediaType,
+      }),
+    );
+
+    return key;
+  } catch (err: unknown) {
+    console.error("Failed to upload base64 image:", err);
+    return null;
+  }
+}
+
+/**
  * Downloads an external image and uploads it to S3.
  * Returns the S3 key, or null if the download/upload fails.
  */

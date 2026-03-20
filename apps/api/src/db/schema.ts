@@ -120,6 +120,7 @@ export const recipeIngredients = pgTable(
     unit: varchar("unit", { length: 50 }),
     category: varchar("category", { length: 100 }),
     isOptional: boolean("is_optional").notNull().default(false),
+    isSuggested: boolean("is_suggested").notNull().default(false),
     sortOrder: integer("sort_order").notNull().default(0),
   },
   (table) => [index("recipe_ingredients_recipe_idx").on(table.recipeId)],
@@ -220,6 +221,31 @@ export const shoppingListItems = pgTable("shopping_list_items", {
   checked: boolean("checked").notNull().default(false),
   isExtra: boolean("is_extra").notNull().default(false),
 });
+
+// ══════════════════════════════════════════════
+// External recipes (scraped from groentenabonnement.nl)
+// ══════════════════════════════════════════════
+
+export const externalRecipes = pgTable(
+  "external_recipes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: varchar("slug", { length: 255 }).notNull().unique(),
+    sourceUrl: text("source_url").notNull().unique(),
+    title: varchar("title", { length: 255 }).notNull(),
+    description: text("description"),
+    imageUrl: text("image_url"),
+    author: varchar("author", { length: 255 }),
+    category: varchar("category", { length: 100 }),
+    ingredientsText: text("ingredients_text"),
+    instructionsText: text("instructions_text"),
+    publishedAt: timestamp("published_at"),
+    searchVector: tsvector("search_vector"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [index("external_recipes_search_idx").using("gin", table.searchVector)],
+);
 
 // ══════════════════════════════════════════════
 // Relations

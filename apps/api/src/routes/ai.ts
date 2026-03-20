@@ -51,6 +51,11 @@ const recipeTool: Anthropic.Tool = {
               description:
                 "Rol in het gerecht: hoofdgroenten = groenten waar het gerecht om draait (bijv. pompoen, bloemkool, aubergine), aromaten = smaakmakers (ui, knoflook, gember, kruiden, specerijen), basis = koolhydraatdrager (pasta, rijst, aardappel, brood), eiwitten = proteïnebron (tofu, linzen, kikkererwten, eieren, kaas), overig = voorraadkast (olie, sauzen, bouillon, blikken)",
             },
+            isSuggested: {
+              type: "boolean",
+              description:
+                "true als dit ingrediënt NIET expliciet in de ingrediëntenlijst staat maar door jou wordt gesuggereerd (bijv. uit de bereidingstekst gehaald, of een ontbrekende basis/eiwit)",
+            },
           },
           required: ["name"],
         },
@@ -125,7 +130,12 @@ const RECIPE_SYSTEM_PROMPT = `Je bent een recepten-expert. Analyseer het aangebo
 Gebruik Nederlandse taal voor alle tekst. Gebruik altijd de save_recipe tool om het resultaat terug te geven.
 Categoriseer elk ingrediënt op basis van de rol in het gerecht: hoofdgroenten (de groenten waar het gerecht om draait), aromaten (smaakmakers zoals ui, knoflook, kruiden), basis (pasta, rijst, aardappel), eiwitten (tofu, linzen, eieren, kaas), overig (olie, sauzen, bouillon).
 BELANGRIJK: Laat standaard keukenspullen zoals zout, peper, olie, olijfolie en boter WEG uit de ingrediëntenlijst. Die heeft iedereen al in huis.
-Bepaal ook de moeilijkheidsgraad: makkelijk (weinig stappen, basistechnieken), gemiddeld (meerdere technieken, timing belangrijk), moeilijk (geavanceerde technieken, veel stappen).`;
+Bepaal ook de moeilijkheidsgraad: makkelijk (weinig stappen, basistechnieken), gemiddeld (meerdere technieken, timing belangrijk), moeilijk (geavanceerde technieken, veel stappen).
+
+SUGGESTIES:
+- Scan de bereidingstekst op ingrediënten die NIET in de ingrediëntenlijst staan (bijv. "serveer met rijst of noedels", "lekker met brood erbij"). Voeg deze toe met isSuggested=true.
+- VERPLICHT: Controleer of het recept een basis (koolhydraat) en een eiwit bevat. Kijk in ZOWEL de ingrediëntenlijst als de bereidingstekst. Als een van deze categorieën volledig ontbreekt, MOET je minstens één passend ingrediënt suggereren met isSuggested=true. Een compleet gerecht heeft altijd een koolhydraat én een eiwitbron — sla dit NOOIT over.
+- Ingrediënten die WEL expliciet in de originele ingrediëntenlijst staan krijgen isSuggested=false (of laat het veld weg).`;
 
 // ── Routes ──
 

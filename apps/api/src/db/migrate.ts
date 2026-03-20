@@ -81,6 +81,27 @@ await db.execute(sql`
     EXECUTE FUNCTION ingredients_search_vector_update();
 `);
 
+// Search trigger for external_recipes (scraped from groentenabonnement.nl)
+await db.execute(sql`
+  CREATE OR REPLACE FUNCTION external_recipes_search_vector_update() RETURNS trigger AS $$
+  BEGIN
+    NEW.search_vector :=
+      setweight(to_tsvector('dutch', COALESCE(NEW.title, '')), 'A') ||
+      setweight(to_tsvector('dutch', COALESCE(NEW.description, '')), 'B') ||
+      setweight(to_tsvector('dutch', COALESCE(NEW.ingredients_text, '')), 'B') ||
+      setweight(to_tsvector('dutch', COALESCE(NEW.category, '')), 'C');
+
+    RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
+
+  DROP TRIGGER IF EXISTS external_recipes_search_vector_trigger ON external_recipes;
+  CREATE TRIGGER external_recipes_search_vector_trigger
+    BEFORE INSERT OR UPDATE ON external_recipes
+    FOR EACH ROW
+    EXECUTE FUNCTION external_recipes_search_vector_update();
+`);
+
 console.log("Search triggers applied.");
 await client.end();
 console.log("Migration complete!");

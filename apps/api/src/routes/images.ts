@@ -44,7 +44,6 @@ app.post("/upload-url", async (c) => {
     Bucket: S3_BUCKET,
     Key: key,
     ContentType: contentType,
-    ContentLength: MAX_SIZE, // Max allowed size
   });
 
   const uploadUrl = await getSignedUrl(s3, command, { expiresIn: PRESIGN_EXPIRY });

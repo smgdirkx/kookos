@@ -36,6 +36,7 @@ type Recipe = {
   prepTimeMinutes?: number;
   cookTimeMinutes?: number;
   ingredients?: { name: string }[];
+  images?: { url: string; isPrimary: boolean }[];
   recipeTags?: { tag: { name: string } }[];
 };
 
@@ -288,10 +289,23 @@ export function RecipesPage() {
           {filtered.map((recipe) => (
             <Link key={recipe.id} to={`/recipe/${recipe.id}`}>
               <Card interactive className="mb-3">
-                <h2 className="font-semibold text-lg">{recipe.title}</h2>
-                {recipe.description && (
-                  <p className="text-gray-500 text-sm mt-1 line-clamp-2">{recipe.description}</p>
-                )}
+                <div className="flex gap-3">
+                  {recipe.images?.[0] && (
+                    <img
+                      src={recipe.images[0].url}
+                      alt=""
+                      className="w-16 h-16 rounded-lg object-cover shrink-0"
+                    />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <h2 className="font-semibold text-lg">{recipe.title}</h2>
+                    {recipe.description && (
+                      <p className="text-gray-500 text-sm mt-1 line-clamp-2">
+                        {recipe.description}
+                      </p>
+                    )}
+                  </div>
+                </div>
                 <div className="flex flex-wrap gap-2 mt-3">
                   {recipe.servings && (
                     <Tag>

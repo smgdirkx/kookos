@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../db/index.js";
 import { recipeImages, recipeIngredients, recipes, recipeTags, tags } from "../db/schema.js";
-import { uploadExternalImage } from "../image.js";
+import { uploadBase64Image, uploadExternalImage } from "../image.js";
 import { requireAuth } from "../middleware.js";
 import { S3_BUCKET, s3 } from "../s3.js";
 import type { AppEnv } from "../types.js";
@@ -84,7 +84,7 @@ app.get("/:id", async (c) => {
 app.post("/", async (c) => {
   const user = c.get("user")!;
   const body = await c.req.json();
-  const { imageUrl, ...recipeBody } = body;
+  const { imageUrl, scanImage, scanMediaType, ...recipeBody } = body;
   const parsed = createRecipeSchema.safeParse(recipeBody);
   if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
 
@@ -105,9 +105,23 @@ app.post("/", async (c) => {
         unit: cleanIngredientField(ing.unit),
         category: ing.category,
         isOptional: ing.isOptional,
+        isSuggested: ing.isSuggested,
         sortOrder: ing.sortOrder ?? i,
       })),
     );
+  }
+
+  // Upload scan photo to S3 (original scan, not shown in gallery)
+  if (scanImage && scanMediaType) {
+    const s3Key = await uploadBase64Image(scanImage, scanMediaType, recipe.id);
+    if (s3Key) {
+      await db.insert(recipeImages).values({
+        recipeId: recipe.id,
+        url: s3Key,
+        isPrimary: false,
+        caption: "scan-original",
+      });
+    }
   }
 
   // Download external image to S3 and save reference
@@ -177,12 +191,31 @@ app.patch("/:id", async (c) => {
           unit: cleanIngredientField(ing.unit),
           category: ing.category,
           isOptional: ing.isOptional,
+          isSuggested: ing.isSuggested,
           sortOrder: ing.sortOrder ?? i,
         })),
       );
     }
     // Trigger search vector rebuild after ingredients change
     await db.update(recipes).set({ updatedAt: new Date() }).where(eq(recipes.id, id));
+  }
+
+  // Replace tags if provided
+  if (tagNames) {
+    await db.delete(recipeTags).where(eq(recipeTags.recipeId, id));
+    for (const tagName of tagNames) {
+      const [tag] = await db
+        .insert(tags)
+        .values({ name: tagName })
+        .onConflictDoNothing()
+        .returning();
+
+      const existingTag = tag ?? (await db.query.tags.findFirst({ where: eq(tags.name, tagName) }));
+
+      if (existingTag) {
+        await db.insert(recipeTags).values({ recipeId: id, tagId: existingTag.id });
+      }
+    }
   }
 
   return c.json(recipe);
