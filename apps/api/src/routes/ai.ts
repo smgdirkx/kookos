@@ -74,8 +74,38 @@ const recipeTool: Anthropic.Tool = {
       },
       tags: {
         type: "array",
-        items: { type: "string" },
-        description: "Tags zoals vegetarisch, snel, glutenvrij, etc.",
+        items: {
+          type: "string",
+          enum: [
+            // Type gerecht
+            "comfort food",
+            "doordeweeks",
+            "feestelijk",
+            "meal prep",
+            "one-pot",
+            "bbq",
+            "bijgerecht",
+            "snack",
+            "ontbijt",
+            "lunch",
+            // Seizoen
+            "lente",
+            "zomer",
+            "herfst",
+            "winter",
+            // Kookmethode
+            "oven",
+            "wok",
+            "rauw",
+            "grillen",
+            // Dieet
+            "veganistisch",
+            "glutenvrij",
+          ],
+        },
+        maxItems: 3,
+        description:
+          "Maximaal 3 tags uit de vaste lijst. Kies alleen tags die echt van toepassing zijn. Niet taggen wat al via cuisine, category of difficulty wordt vastgelegd.",
       },
     },
     required: ["title", "instructions", "ingredients"],
@@ -161,7 +191,12 @@ SUGGESTIES:
 - Scan de VOLLEDIGE tekst — titel, beschrijving, ingrediëntenlijst, bereidingsstappen, tips, en serveersuggesties — op ALLE genoemde etenswaren/ingrediënten. ELKE eetbare suggestie die ergens in de tekst wordt genoemd MOET als apart ingrediënt in de ingrediëntenlijst komen met isSuggested=true, behalve als het niet-vegetarisch is. Sla er GEEN ENKELE over. Als er meerdere alternatieven worden gesuggereerd, voeg ze ALLEMAAL toe als aparte ingrediënten.
 - NOOIT vlees of vis suggereren. Als het origineel vlees/vis suggereert als variatie of serveertip, vervang dit door een vegetarisch alternatief.
 - VERPLICHT: Controleer of het recept een basis (koolhydraat) en een eiwit bevat. Kijk in ZOWEL de ingrediëntenlijst als de bereidingstekst. Als een van deze categorieën volledig ontbreekt, MOET je minstens één passend vegetarisch ingrediënt suggereren met isSuggested=true. Een compleet gerecht heeft altijd een koolhydraat én een eiwitbron — sla dit NOOIT over.
-- Ingrediënten die WEL expliciet in de originele ingrediëntenlijst staan krijgen isSuggested=false (of laat het veld weg).`;
+- Ingrediënten die WEL expliciet in de originele ingrediëntenlijst staan krijgen isSuggested=false (of laat het veld weg).
+
+TAGS — STRIKTE REGELS:
+- Kies maximaal 3 tags uit de vaste lijst in de tool. Minder is beter — tag alleen wat echt relevant is.
+- GEEN tags die overlappen met bestaande velden: cuisine dekt de keuken, category dekt het gerecht-type (pasta, soep, etc.), difficulty dekt de moeilijkheidsgraad, en bereidingstijd staat apart.
+- Wees selectief: een simpele pasta hoeft geen 3 tags. Als er niets bijzonders is, geef 0 of 1 tag.`;
 
 // ── Helpers (recipe saving) ──
 
