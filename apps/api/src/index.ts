@@ -11,6 +11,7 @@ import { auth } from "./auth.js";
 import { authMiddleware } from "./middleware.js";
 import aiRoutes from "./routes/ai.js";
 import commentRoutes from "./routes/comments.js";
+import communityRoutes from "./routes/community.js";
 import externalRecipeRoutes from "./routes/external-recipes.js";
 import imageRoutes from "./routes/images.js";
 import mealPlanRoutes from "./routes/meal-plans.js";
@@ -52,6 +53,7 @@ app.route("/api/ai", aiRoutes);
 app.route("/api/images", imageRoutes);
 app.route("/api/tags", tagRoutes);
 app.route("/api/external-recipes", externalRecipeRoutes);
+app.route("/api/community", communityRoutes);
 
 // Health check
 app.get("/health", (c) => c.json({ status: "ok" }));

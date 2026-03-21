@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { TagInput } from "@/components/tag-input";
 import {
   Button,
@@ -385,6 +385,7 @@ function MealPlanHistoryModal({
 export function RecipePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const [confirm, confirmModal] = useConfirm();
   const commentsRef = useRef<HTMLElement>(null);
@@ -496,14 +497,16 @@ export function RecipePage() {
           cookTimeMinutes: data.cookTimeMinutes,
           difficulty: data.difficulty,
 
-          ingredients: data.ingredients.map((ing, i) => ({
-            name: ing.name,
-            amount: ing.amount || undefined,
-            unit: ing.unit || undefined,
-            category: ing.category,
-            isSuggested: ing.isSuggested,
-            sortOrder: i,
-          })),
+          ingredients: data.ingredients
+            .filter((ing) => ing.name.trim())
+            .map((ing, i) => ({
+              name: ing.name,
+              amount: ing.amount || undefined,
+              unit: ing.unit || undefined,
+              category: ing.category,
+              isSuggested: ing.isSuggested,
+              sortOrder: i,
+            })),
         },
       }),
     onSuccess: () => {
@@ -520,6 +523,16 @@ export function RecipePage() {
       setIsEditing(true);
     }
   }
+
+  // Auto-enter edit mode when navigated with state.edit (e.g. manual add)
+  useEffect(() => {
+    if ((location.state as { edit?: boolean })?.edit && recipe && !isEditing) {
+      setEditData(recipeToEditData(recipe));
+      setIsEditing(true);
+      // Clear the state so refreshing doesn't re-enter edit mode
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [recipe, location.state, isEditing, navigate, location.pathname]);
 
   function cancelEditing() {
     setIsEditing(false);

@@ -6,6 +6,7 @@ import { Layout } from "@/components/layout";
 import { useAuthStore } from "@/lib/auth";
 import { AddRecipePage } from "@/pages/add-recipe";
 import { AddUserPage } from "@/pages/add-user";
+import { CommunityRecipesPage } from "@/pages/community-recipes";
 import { ExternalRecipesPage } from "@/pages/external-recipes";
 import { LoginPage } from "@/pages/login";
 import { MealPlanPage } from "@/pages/meal-plan";
@@ -46,6 +47,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="shopping-lists" element={<ShoppingListsPage />} />
             <Route path="shopping-lists/:id" element={<ShoppingListDetailPage />} />
             <Route path="add-recipe" element={<AddRecipePage />} />
+            <Route path="add-recipe/community" element={<CommunityRecipesPage />} />
             <Route path="add-recipe/groentenabonnement" element={<ExternalRecipesPage />} />
             <Route path="add-recipe/gebruiker" element={<AddUserPage />} />
           </Route>

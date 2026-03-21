@@ -47,6 +47,18 @@ function extractSlug(url: string): string {
   return match?.[1] ?? url;
 }
 
+/** Decode common HTML entities */
+function decodeHtmlEntities(str: string): string {
+  return str
+    .replace(/&#039;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#x27;/g, "'")
+    .replace(/&#39;/g, "'");
+}
+
 /** Parse a single recipe page */
 function parseRecipePage(html: string, url: string) {
   // 1. Parse JSON-LD (Rank Math format)
@@ -115,6 +127,12 @@ function parseRecipePage(html: string, url: string) {
   if (instructionsText) {
     instructionsText = instructionsText.replace(/&nbsp;/g, " ").trim();
   }
+
+  // Decode HTML entities in text fields
+  title = decodeHtmlEntities(title);
+  if (description) description = decodeHtmlEntities(description);
+  if (ingredientsText) ingredientsText = decodeHtmlEntities(ingredientsText);
+  if (instructionsText) instructionsText = decodeHtmlEntities(instructionsText);
 
   return {
     slug: extractSlug(url),

@@ -1,5 +1,14 @@
-import { Clock, Save, Sparkles } from "lucide-react";
-import { useState } from "react";
+import {
+  type DifficultyLevel,
+  difficultyLabels,
+  difficultyLevels,
+  type MaxTimeOption,
+  maxTimeLabels,
+  maxTimeOptions,
+} from "@kookos/shared";
+import { useQuery } from "@tanstack/react-query";
+import { AlertTriangle, ChevronDown, Clock, Save, Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Button,
@@ -12,6 +21,8 @@ import {
 } from "@/components/ui";
 import { api } from "@/lib/api";
 import { generateMealPlanName } from "@/lib/date";
+
+const MIN_RECIPES = 10;
 
 type RecipeOption = {
   recipeId: string;
@@ -29,11 +40,29 @@ type MealPlanDay = {
 
 type MealPlanResult = {
   mealPlan: MealPlanDay[];
+  warnings?: string[];
 };
 
 type Selections = Record<number, number>;
 
 const STORAGE_KEY = "kookos-draft-meal-plan";
+const FORM_KEY = "kookos-meal-plan-form";
+
+type Preferences = {
+  maxTime: MaxTimeOption;
+  difficulty: DifficultyLevel | "";
+  varietyCuisine: boolean;
+  seasonal: boolean;
+  freeText: string;
+};
+
+const defaultPreferences: Preferences = {
+  maxTime: 0,
+  difficulty: "",
+  varietyCuisine: true,
+  seasonal: false,
+  freeText: "",
+};
 
 function loadDraft(): {
   result: MealPlanResult;
@@ -41,6 +70,7 @@ function loadDraft(): {
   ingredients: string;
   people: string;
   days: string;
+  preferences?: Preferences;
 } | null {
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY);
@@ -57,10 +87,11 @@ function saveDraft(
   ingredients: string,
   people: string,
   days: string,
+  preferences: Preferences,
 ) {
   sessionStorage.setItem(
     STORAGE_KEY,
-    JSON.stringify({ result, selections, ingredients, people, days }),
+    JSON.stringify({ result, selections, ingredients, people, days, preferences }),
   );
 }
 
@@ -68,18 +99,68 @@ function clearDraft() {
   sessionStorage.removeItem(STORAGE_KEY);
 }
 
+type FormState = {
+  ingredients: string;
+  people: string;
+  days: string;
+  preferences: Preferences;
+};
+
+function loadFormState(): FormState | null {
+  try {
+    const raw = sessionStorage.getItem(FORM_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function saveFormState(state: FormState) {
+  sessionStorage.setItem(FORM_KEY, JSON.stringify(state));
+}
+
 export function MealPlanPage() {
   const navigate = useNavigate();
   const draft = loadDraft();
+  const savedForm = loadFormState();
 
-  const [ingredients, setIngredients] = useState(draft?.ingredients ?? "");
-  const [people, setPeople] = useState(draft?.people ?? "2");
-  const [days, setDays] = useState(draft?.days ?? "5");
+  const { data: recipeCount, isLoading: countLoading } = useQuery<{ id: string }[]>({
+    queryKey: ["recipes"],
+    queryFn: () => api("/api/recipes"),
+    select: (data) => data,
+  });
+
+  const hasEnoughRecipes = (recipeCount?.length ?? 0) >= MIN_RECIPES;
+
+  // Form state: draft (post-generate) takes priority, then saved form state, then defaults
+  const [ingredients, setIngredients] = useState(
+    draft?.ingredients ?? savedForm?.ingredients ?? "",
+  );
+  const [people, setPeople] = useState(draft?.people ?? savedForm?.people ?? "2");
+  const [days, setDays] = useState(draft?.days ?? savedForm?.days ?? "5");
+  const [prefs, setPrefs] = useState<Preferences>(
+    draft?.preferences ?? savedForm?.preferences ?? defaultPreferences,
+  );
+  const [prefsOpen, setPrefsOpen] = useState(false);
   const [result, setResult] = useState<MealPlanResult | null>(draft?.result ?? null);
   const [selections, setSelections] = useState<Selections>(draft?.selections ?? {});
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [checkWarnings, setCheckWarnings] = useState<string[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  // Persist form inputs so they survive navigation
+  useEffect(() => {
+    saveFormState({ ingredients, people, days, preferences: prefs });
+  }, [ingredients, people, days, prefs]);
+
+  function cancelDraft() {
+    clearDraft();
+    sessionStorage.removeItem(FORM_KEY);
+    navigate("/meal-plans");
+  }
 
   async function createManualPlan() {
     setSaving(true);
@@ -102,24 +183,59 @@ export function MealPlanPage() {
     setSaving(false);
   }
 
-  async function generatePlan(e: React.FormEvent) {
+  function buildRequestBody() {
+    return {
+      availableIngredients: ingredients
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+      numberOfPeople: parseInt(people, 10) || 2,
+      numberOfDays: parseInt(days, 10) || 5,
+      ...(prefs.maxTime > 0 && { maxTimeMinutes: prefs.maxTime }),
+      ...(prefs.difficulty && { difficulty: prefs.difficulty }),
+      varietyCuisine: prefs.varietyCuisine,
+      seasonal: prefs.seasonal,
+      ...(prefs.freeText.trim() && { preferences: prefs.freeText.trim() }),
+    };
+  }
+
+  async function checkAndGenerate(e: React.FormEvent) {
     e.preventDefault();
     if (!ingredients.trim()) return;
-    setLoading(true);
     setError("");
     setResult(null);
+    setCheckWarnings(null);
+    setChecking(true);
+
+    try {
+      const check = await api<{ warnings: string[] }>("/api/ai/meal-plan/check", {
+        method: "POST",
+        body: buildRequestBody(),
+      });
+
+      if (check.warnings.length > 0) {
+        setCheckWarnings(check.warnings);
+        setChecking(false);
+        return;
+      }
+
+      await doGenerate();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Onbekende fout");
+      setChecking(false);
+    }
+  }
+
+  async function doGenerate() {
+    setCheckWarnings(null);
+    setChecking(false);
+    setLoading(true);
+    setError("");
 
     try {
       const data = await api<MealPlanResult>("/api/ai/meal-plan", {
         method: "POST",
-        body: {
-          availableIngredients: ingredients
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean),
-          numberOfPeople: parseInt(people, 10) || 2,
-          numberOfDays: parseInt(days, 10) || 5,
-        },
+        body: buildRequestBody(),
       });
       const defaultSelections: Selections = {};
       for (const day of data.mealPlan) {
@@ -127,7 +243,7 @@ export function MealPlanPage() {
       }
       setResult(data);
       setSelections(defaultSelections);
-      saveDraft(data, defaultSelections, ingredients, people, days);
+      saveDraft(data, defaultSelections, ingredients, people, days, prefs);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Onbekende fout");
     }
@@ -155,6 +271,7 @@ export function MealPlanPage() {
       });
 
       clearDraft();
+      sessionStorage.removeItem(FORM_KEY);
       navigate(`/meal-plans/${saved.id}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Opslaan mislukt");
@@ -162,11 +279,36 @@ export function MealPlanPage() {
     setSaving(false);
   }
 
+  if (countLoading) {
+    return (
+      <div>
+        <PageHeader title="Nieuw menu" back={cancelDraft} />
+        <Loading message="Laden..." />
+      </div>
+    );
+  }
+
   return (
     <div>
-      <PageHeader title="Nieuw menu" />
+      <PageHeader title="Nieuw menu" back={cancelDraft} />
 
-      <form onSubmit={generatePlan} className="space-y-4">
+      {!hasEnoughRecipes && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="flex items-start gap-2">
+            <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+            <div className="text-sm text-amber-800">
+              <p>
+                Je hebt pas {recipeCount?.length ?? 0} recepten. Het resultaat zal beperkt zijn.{" "}
+                <Link to="/add-recipe" className="underline font-medium hover:text-amber-900">
+                  Voeg meer recepten toe
+                </Link>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <form onSubmit={checkAndGenerate} className="space-y-4">
         <Textarea
           label="Welke ingrediënten heb je?"
           placeholder="bijv. broccoli, witte kool, knoflook, aardappels"
@@ -193,15 +335,106 @@ export function MealPlanPage() {
           />
         </div>
 
+        <div className="border border-gray-200 rounded-xl overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setPrefsOpen(!prefsOpen)}
+            className="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            Voorkeuren
+            <ChevronDown
+              size={16}
+              className={`text-gray-400 transition-transform ${prefsOpen ? "rotate-180" : ""}`}
+            />
+          </button>
+
+          {prefsOpen && (
+            <div className="px-4 pb-4 space-y-4 border-t border-gray-100">
+              <div className="flex gap-4 pt-3">
+                <div className="w-full">
+                  <label htmlFor="max-time" className="block text-sm font-medium mb-1">
+                    Bereidingstijd
+                  </label>
+                  <select
+                    id="max-time"
+                    value={prefs.maxTime}
+                    onChange={(e) =>
+                      setPrefs({ ...prefs, maxTime: Number(e.target.value) as MaxTimeOption })
+                    }
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow"
+                  >
+                    {maxTimeOptions.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {maxTimeLabels[opt]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="w-full">
+                  <label htmlFor="difficulty" className="block text-sm font-medium mb-1">
+                    Moeilijkheid
+                  </label>
+                  <select
+                    id="difficulty"
+                    value={prefs.difficulty}
+                    onChange={(e) =>
+                      setPrefs({ ...prefs, difficulty: e.target.value as DifficultyLevel | "" })
+                    }
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow"
+                  >
+                    <option value="">Geen voorkeur</option>
+                    {difficultyLevels.map((level) => (
+                      <option key={level} value={level}>
+                        {difficultyLabels[level]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={prefs.varietyCuisine}
+                    onChange={(e) => setPrefs({ ...prefs, varietyCuisine: e.target.checked })}
+                    className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <span className="text-sm">Variatie in keuken</span>
+                </label>
+
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={prefs.seasonal}
+                    onChange={(e) => setPrefs({ ...prefs, seasonal: e.target.checked })}
+                    className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <span className="text-sm">Seizoensgebonden</span>
+                </label>
+              </div>
+
+              <Textarea
+                label="Extra wensen"
+                placeholder="bijv. geen pasta deze week, graag een keer stamppot, liefst lichte maaltijden"
+                value={prefs.freeText}
+                onChange={(e) => setPrefs({ ...prefs, freeText: e.target.value })}
+                rows={2}
+              />
+            </div>
+          )}
+        </div>
+
         <Button
           type="submit"
           variant="cta"
           size="lg"
           fullWidth
           icon={Sparkles}
-          disabled={loading || !ingredients.trim()}
+          disabled={loading || checking || !ingredients.trim()}
         >
-          {loading ? "Bezig met plannen..." : "Genereer weekmenu"}
+          {checking ? "Controleren..." : loading ? "Bezig met plannen..." : "Genereer weekmenu"}
         </Button>
 
         <button
@@ -217,6 +450,30 @@ export function MealPlanPage() {
       {error && <p className="text-danger text-sm mt-4">{error}</p>}
 
       {loading && <Loading message="AI genereert je weekmenu..." />}
+
+      {checkWarnings && checkWarnings.length > 0 && (
+        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 space-y-3">
+          <div className="flex items-start gap-2">
+            <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+            <ul className="text-sm text-amber-800 space-y-1">
+              {checkWarnings.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Button variant="cta" size="sm" icon={Sparkles} onClick={doGenerate} fullWidth>
+              Toch doorgaan
+            </Button>
+            <Link
+              to="/add-recipe"
+              className="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Recepten toevoegen
+            </Link>
+          </div>
+        </div>
+      )}
 
       {result?.mealPlan && (
         <div className="mt-8 pt-6 border-t border-gray-200">
@@ -241,7 +498,7 @@ export function MealPlanPage() {
               function select(idx: number) {
                 const next = { ...selections, [day.day]: idx };
                 setSelections(next);
-                saveDraft(result!, next, ingredients, people, days);
+                saveDraft(result!, next, ingredients, people, days, prefs);
               }
 
               return (

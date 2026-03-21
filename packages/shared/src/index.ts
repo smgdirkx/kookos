@@ -62,7 +62,7 @@ export const createRecipeSchema = z.object({
   cuisine: z.string().optional(),
   category: z.string().optional(),
   difficulty: z.enum(difficultyLevels).optional(),
-  source: z.enum(["scan", "url", "manual"]).optional(),
+  source: z.enum(["scan", "url", "manual", "community"]).optional(),
   sourceUrl: z.string().url().optional(),
   notes: z.string().optional(),
   ingredients: z.array(recipeIngredientSchema).optional(),
@@ -141,11 +141,39 @@ export const pasteRecipeSchema = z.object({
   text: z.string().min(10),
 });
 
+export const maxTimeOptions = [0, 30, 45, 60] as const;
+
+export type MaxTimeOption = (typeof maxTimeOptions)[number];
+
+export const maxTimeLabels: Record<MaxTimeOption, string> = {
+  0: "Geen voorkeur",
+  30: "Max 30 min",
+  45: "Max 45 min",
+  60: "Max 60 min",
+};
+
 export const generateMealPlanSchema = z.object({
   availableIngredients: z.array(z.string()),
   numberOfPeople: z.number().int().positive().default(2),
   numberOfDays: z.number().int().positive().default(5),
+  maxTimeMinutes: z.number().int().nonnegative().optional(),
+  difficulty: z.enum(difficultyLevels).optional(),
+  varietyCuisine: z.boolean().default(true),
+  seasonal: z.boolean().default(false),
   preferences: z.string().optional(),
+});
+
+// ── Community recipe schemas ──
+
+export const searchCommunityRecipesSchema = z.object({
+  userId: z.string().optional(),
+  query: z.string().optional(),
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(50).default(20),
+});
+
+export const copyCommunityRecipesSchema = z.object({
+  recipeIds: z.array(z.string().uuid()).min(1),
 });
 
 // ── External recipe schemas ──
@@ -189,3 +217,5 @@ export type ImportRecipe = z.infer<typeof importRecipeSchema>;
 export type ScanRecipe = z.infer<typeof scanRecipeSchema>;
 export type PasteRecipe = z.infer<typeof pasteRecipeSchema>;
 export type GenerateMealPlan = z.infer<typeof generateMealPlanSchema>;
+export type SearchCommunityRecipes = z.infer<typeof searchCommunityRecipesSchema>;
+export type CopyCommunityRecipes = z.infer<typeof copyCommunityRecipesSchema>;

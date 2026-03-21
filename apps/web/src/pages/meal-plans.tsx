@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CalendarDays, Check, ChevronDown, Clock, Pencil, Plus } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import {
   Card,
   EmptyState,
@@ -221,8 +221,16 @@ function MealPlanLists({
   );
 }
 
+const FORM_KEY = "kookos-meal-plan-form";
+const DRAFT_KEY = "kookos-draft-meal-plan";
+
+function hasDraft() {
+  return sessionStorage.getItem(FORM_KEY) !== null || sessionStorage.getItem(DRAFT_KEY) !== null;
+}
+
 export function MealPlansPage() {
   const queryClient = useQueryClient();
+  const shouldRedirect = hasDraft();
 
   const { data: plans, isLoading } = useQuery<MealPlan[]>({
     queryKey: ["meal-plans"],
@@ -263,6 +271,7 @@ export function MealPlansPage() {
     },
   });
 
+  if (shouldRedirect) return <Navigate to="/meal-plan/new" replace />;
   if (isLoading) return <Loading />;
 
   return (

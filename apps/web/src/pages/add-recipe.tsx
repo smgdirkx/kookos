@@ -9,7 +9,9 @@ import {
   Leaf,
   Link as LinkIcon,
   Loader2,
+  PenLine,
   Sparkles,
+  Users,
   X,
 } from "lucide-react";
 import { useRef, useState } from "react";
@@ -184,6 +186,26 @@ export function AddRecipePage() {
     }
   }
 
+  async function handleManual() {
+    setLoading(true);
+    setStatus("Nieuw recept aanmaken...");
+    try {
+      const saved = await api<{ id: string }>("/api/recipes", {
+        method: "POST",
+        body: {
+          title: "Nieuw recept",
+          instructions: "-",
+          source: "manual",
+        },
+      });
+      queryClient.invalidateQueries({ queryKey: ["recipes"] });
+      navigate(`/recipe/${saved.id}`, { replace: true, state: { edit: true } });
+    } catch (err: unknown) {
+      setStatus(`Fout: ${err instanceof Error ? err.message : "Onbekende fout"}`);
+      setLoading(false);
+    }
+  }
+
   function handleBack() {
     setStep("choose");
     setUrl("");
@@ -197,7 +219,7 @@ export function AddRecipePage() {
 
   return (
     <div>
-      <PageHeader title="Toevoegen" back={step !== "choose" ? handleBack : undefined} />
+      <PageHeader title="Recepten toevoegen" back={step !== "choose" ? handleBack : undefined} />
 
       {loading && <Loading message={status} />}
 
@@ -212,8 +234,36 @@ export function AddRecipePage() {
               <BookOpen className="w-6 h-6" />
             </div>
             <div>
-              <p className="font-semibold text-gray-900">Scan uit kookboek</p>
+              <p className="font-semibold text-gray-900">Foto van kookboek</p>
               <p className="text-sm text-gray-500">Maak een foto van een recept</p>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate("/add-recipe/community")}
+            className="w-full flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-200 hover:border-orange-300 hover:bg-orange-50/50 transition-colors text-left"
+          >
+            <div className="flex-shrink-0 w-12 h-12 bg-teal-100 text-teal-600 rounded-xl flex items-center justify-center">
+              <Users className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="font-semibold text-gray-900">Kopieer van de community</p>
+              <p className="text-sm text-gray-500">Kopieer recepten van andere gebruikers</p>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate("/add-recipe/groentenabonnement")}
+            className="w-full flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-200 hover:border-orange-300 hover:bg-orange-50/50 transition-colors text-left"
+          >
+            <div className="flex-shrink-0 w-12 h-12 bg-green-100 text-green-600 rounded-xl flex items-center justify-center">
+              <Leaf className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="font-semibold text-gray-900">Groentenabonnement</p>
+              <p className="text-sm text-gray-500">Kies uit 1500+ recepten</p>
             </div>
           </button>
 
@@ -247,15 +297,15 @@ export function AddRecipePage() {
 
           <button
             type="button"
-            onClick={() => navigate("/add-recipe/groentenabonnement")}
+            onClick={handleManual}
             className="w-full flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-200 hover:border-orange-300 hover:bg-orange-50/50 transition-colors text-left"
           >
-            <div className="flex-shrink-0 w-12 h-12 bg-green-100 text-green-600 rounded-xl flex items-center justify-center">
-              <Leaf className="w-6 h-6" />
+            <div className="flex-shrink-0 w-12 h-12 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center">
+              <PenLine className="w-6 h-6" />
             </div>
             <div>
-              <p className="font-semibold text-gray-900">Groentenabonnement</p>
-              <p className="text-sm text-gray-500">Kies uit 1500+ recepten</p>
+              <p className="font-semibold text-gray-900">Handmatig toevoegen</p>
+              <p className="text-sm text-gray-500">Typ zelf een nieuw recept</p>
             </div>
           </button>
         </div>

@@ -7,7 +7,7 @@ import {
   pasteRecipeSchema,
   scanRecipeSchema,
 } from "@kookos/shared";
-import { and, eq, notInArray, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../db/index.js";
 import { recipeImages, recipeIngredients, recipes, recipeTags, tags } from "../db/schema.js";
@@ -462,6 +462,93 @@ app.post("/paste", async (c) => {
   return c.json(saved, 201);
 });
 
+// Pre-filter recipes based on ingredients and preferences, returns recipes + warnings
+async function preFilterRecipes(
+  userId: string,
+  data: {
+    availableIngredients: string[];
+    numberOfDays: number;
+    maxTimeMinutes?: number;
+    difficulty?: string;
+  },
+) {
+  const { availableIngredients, maxTimeMinutes, difficulty } = data;
+  const tsQueries = availableIngredients.map((ing) => sql`plainto_tsquery('dutch', ${ing})`);
+  const combinedTsQuery = sql.join(tsQueries, sql` || `);
+
+  // Build preference filters for time and difficulty
+  const prefFilters = [];
+  if (maxTimeMinutes && maxTimeMinutes > 0) {
+    prefFilters.push(
+      sql`(COALESCE(${recipes.prepTimeMinutes}, 0) + COALESCE(${recipes.cookTimeMinutes}, 0) <= ${maxTimeMinutes} OR (${recipes.prepTimeMinutes} IS NULL AND ${recipes.cookTimeMinutes} IS NULL))`,
+    );
+  }
+  if (difficulty) {
+    prefFilters.push(sql`(${recipes.difficulty} = ${difficulty} OR ${recipes.difficulty} IS NULL)`);
+  }
+  const prefFilter =
+    prefFilters.length > 0 ? sql` AND ${sql.join(prefFilters, sql` AND `)}` : sql``;
+
+  // Check which ingredients have matching recipes
+  const unmatchedIngredients: string[] = [];
+  for (const ing of availableIngredients) {
+    const hits = await db.query.recipes.findMany({
+      where: sql`${recipes.userId} = ${userId} AND ${recipes.searchVector} @@ plainto_tsquery('dutch', ${ing})${prefFilter}`,
+      columns: { id: true },
+      limit: 1,
+    });
+    if (hits.length === 0) unmatchedIngredients.push(ing);
+  }
+
+  const matchedRecipes = await db.query.recipes.findMany({
+    where: sql`${recipes.userId} = ${userId} AND ${recipes.searchVector} @@ (${combinedTsQuery})${prefFilter}`,
+    with: { ingredients: true, images: true },
+  });
+
+  const matchedIds = new Set(matchedRecipes.map((r) => r.id));
+
+  const extraRecipes =
+    matchedRecipes.length < 50
+      ? await db.query.recipes.findMany({
+          where: sql`${recipes.userId} = ${userId}${
+            matchedIds.size > 0
+              ? sql` AND ${recipes.id} NOT IN (${sql.join(
+                  [...matchedIds].map((id) => sql`${id}`),
+                  sql`, `,
+                )})`
+              : sql``
+          }${prefFilter}`,
+          with: { ingredients: true, images: true },
+          limit: 20,
+        })
+      : [];
+
+  const userRecipes = [...matchedRecipes, ...extraRecipes];
+
+  const warnings: string[] = [];
+  if (unmatchedIngredients.length > 0) {
+    warnings.push(`Geen recepten gevonden voor: ${unmatchedIngredients.join(", ")}`);
+  }
+  if (userRecipes.length < data.numberOfDays) {
+    warnings.push(
+      `Slechts ${userRecipes.length} recepten gevonden voor ${data.numberOfDays} dagen. Het menu kan herhalingen bevatten.`,
+    );
+  }
+
+  return { userRecipes, matchedIds, warnings };
+}
+
+// Pre-check meal plan: returns warnings before AI generation
+app.post("/meal-plan/check", async (c) => {
+  const user = c.get("user")!;
+  const body = await c.req.json();
+  const parsed = generateMealPlanSchema.safeParse(body);
+  if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
+
+  const { warnings } = await preFilterRecipes(user.id, parsed.data);
+  return c.json({ warnings });
+});
+
 // Generate meal plan with available ingredients
 app.post("/meal-plan", async (c) => {
   const user = c.get("user")!;
@@ -469,32 +556,7 @@ app.post("/meal-plan", async (c) => {
   const parsed = generateMealPlanSchema.safeParse(body);
   if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
 
-  // Pre-filter recipes: tsvector search for matching ingredients, plus random extras for variety
-  const { availableIngredients } = parsed.data;
-  const tsQueries = availableIngredients.map((ing) => sql`plainto_tsquery('dutch', ${ing})`);
-  const combinedTsQuery = sql.join(tsQueries, sql` || `);
-
-  const matchedRecipes = await db.query.recipes.findMany({
-    where: sql`${recipes.userId} = ${user.id} AND ${recipes.searchVector} @@ (${combinedTsQuery})`,
-    with: { ingredients: true, images: true },
-  });
-
-  const matchedIds = new Set(matchedRecipes.map((r) => r.id));
-
-  // Add extra non-matching recipes for variety (up to 20)
-  const extraRecipes =
-    matchedRecipes.length < 50
-      ? await db.query.recipes.findMany({
-          where:
-            matchedIds.size > 0
-              ? and(eq(recipes.userId, user.id), notInArray(recipes.id, [...matchedIds]))
-              : eq(recipes.userId, user.id),
-          with: { ingredients: true, images: true },
-          limit: 20,
-        })
-      : [];
-
-  const userRecipes = [...matchedRecipes, ...extraRecipes];
+  const { userRecipes, matchedIds, warnings } = await preFilterRecipes(user.id, parsed.data);
 
   const recipeSummaries = userRecipes.map((r) => ({
     id: r.id,
@@ -541,7 +603,9 @@ Gebruik altijd de save_meal_plan tool om het resultaat terug te geven.`,
         content: `Beschikbare ingrediënten: ${parsed.data.availableIngredients.join(", ")}
 Aantal personen: ${parsed.data.numberOfPeople}
 Aantal dagen: ${parsed.data.numberOfDays}
-${parsed.data.preferences ? `Voorkeuren: ${parsed.data.preferences}` : ""}
+${parsed.data.varietyCuisine ? "Variatie in keuken: Wissel zoveel mogelijk verschillende keukens af (bijv. Italiaans, Aziatisch, Mexicaans, Nederlands)." : ""}
+${parsed.data.seasonal ? "Seizoensgebonden: Geef voorkeur aan recepten met seizoensgroenten." : ""}
+${parsed.data.preferences ? `Extra wensen: ${parsed.data.preferences}` : ""}
 
 Bestaande recepten:
 ${JSON.stringify(recipeSummaries, null, 2)}`,
@@ -566,7 +630,7 @@ ${JSON.stringify(recipeSummaries, null, 2)}`,
     }
   }
 
-  return c.json(aiResult);
+  return c.json({ ...aiResult, warnings });
 });
 
 export default app;
