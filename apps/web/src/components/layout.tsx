@@ -1,14 +1,56 @@
 import type { LucideIcon } from "lucide-react";
-import { BookOpen, CalendarDays, EllipsisVertical, LogOut, Plus, UserPlus } from "lucide-react";
+import {
+  BookOpen,
+  CalendarDays,
+  EllipsisVertical,
+  LogOut,
+  Plus,
+  ShoppingCart,
+  UserPlus,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/lib/auth";
 
-const tabs: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = [
-  { to: "/", label: "Recepten", icon: BookOpen, end: true },
-  { to: "/meal-plans", label: "Weekmenu", icon: CalendarDays },
-  { to: "/add-recipe", label: "Toevoegen", icon: Plus },
+const leftTabs: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = [
+  { to: "/", label: "Recept", icon: BookOpen, end: true },
+  { to: "/meal-plans", label: "Menu", icon: CalendarDays },
 ];
+
+const rightTabs: { to: string; label: string; icon: LucideIcon }[] = [
+  { to: "/shopping-lists", label: "Boodschap", icon: ShoppingCart },
+];
+
+function TabLink({
+  to,
+  label,
+  icon: Icon,
+  end,
+}: {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  end?: boolean;
+}) {
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      className={({ isActive }: { isActive: boolean }) =>
+        `flex flex-col items-center py-2 px-3 text-xs transition-colors ${
+          isActive ? "text-primary" : "text-gray-400"
+        }`
+      }
+    >
+      {({ isActive }: { isActive: boolean }) => (
+        <>
+          <Icon size={22} strokeWidth={isActive ? 2.5 : 2} className="mb-0.5" />
+          <span className={isActive ? "font-medium" : ""}>{label}</span>
+        </>
+      )}
+    </NavLink>
+  );
+}
 
 export function Layout() {
   const navigate = useNavigate();
@@ -45,25 +87,30 @@ export function Layout() {
       </main>
 
       <nav className="fixed bottom-0 inset-x-0 bg-white border-t border-gray-200 safe-bottom">
-        <div className="mx-auto max-w-2xl flex justify-around">
-          {tabs.map((tab) => (
-            <NavLink
-              key={tab.to}
-              to={tab.to}
-              end={tab.end}
-              className={({ isActive }: { isActive: boolean }) =>
-                `flex flex-col items-center py-2 px-3 text-xs transition-colors ${
-                  isActive ? "text-primary" : "text-gray-400"
-                }`
-              }
-            >
-              {({ isActive }: { isActive: boolean }) => (
-                <>
-                  <tab.icon size={22} strokeWidth={isActive ? 2.5 : 2} className="mb-0.5" />
-                  <span className={isActive ? "font-medium" : ""}>{tab.label}</span>
-                </>
-              )}
-            </NavLink>
+        <div className="mx-auto max-w-2xl flex items-center justify-around relative">
+          {leftTabs.map((tab) => (
+            <TabLink key={tab.to} {...tab} />
+          ))}
+
+          {/* FAB — floating add button */}
+          <NavLink
+            to="/add-recipe"
+            className={({ isActive }: { isActive: boolean }) =>
+              `absolute left-1/2 -translate-x-1/2 -top-4 w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all ${
+                isActive
+                  ? "bg-cta text-white scale-105"
+                  : "bg-cta text-white hover:bg-cta-dark active:scale-95"
+              }`
+            }
+          >
+            <Plus size={24} strokeWidth={2.5} />
+          </NavLink>
+
+          {/* Spacer for the FAB */}
+          <div className="w-12" />
+
+          {rightTabs.map((tab) => (
+            <TabLink key={tab.to} {...tab} />
           ))}
 
           <div ref={menuRef} className="relative">

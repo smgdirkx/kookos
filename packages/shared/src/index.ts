@@ -101,6 +101,14 @@ export const shoppingListItemSchema = z.object({
   unit: z.string().optional(),
   checked: z.boolean().default(false),
   isExtra: z.boolean().default(false),
+  recipeId: z.string().uuid().optional(),
+  isSuggested: z.boolean().default(false),
+  category: z.string().optional(),
+});
+
+export const createShoppingListSchema = z.object({
+  name: z.string().min(1).max(255),
+  mealPlanId: z.string().uuid().optional(),
 });
 
 // ── Comment schemas ──
@@ -174,6 +182,7 @@ export type SearchRecipes = z.infer<typeof searchRecipesSchema>;
 export type CreateMealPlan = z.infer<typeof createMealPlanSchema>;
 export type MealPlanItem = z.infer<typeof mealPlanItemSchema>;
 export type ShoppingListItem = z.infer<typeof shoppingListItemSchema>;
+export type CreateShoppingList = z.infer<typeof createShoppingListSchema>;
 export type CreateComment = z.infer<typeof createCommentSchema>;
 export type UpdateComment = z.infer<typeof updateCommentSchema>;
 export type ImportRecipe = z.infer<typeof importRecipeSchema>;

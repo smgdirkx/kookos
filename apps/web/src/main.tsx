@@ -13,6 +13,8 @@ import { MealPlanDetailPage } from "@/pages/meal-plan-detail";
 import { MealPlansPage } from "@/pages/meal-plans";
 import { RecipePage } from "@/pages/recipe";
 import { RecipesPage } from "@/pages/recipes";
+import { ShoppingListDetailPage } from "@/pages/shopping-list-detail";
+import { ShoppingListsPage } from "@/pages/shopping-lists";
 import "./index.css";
 
 const queryClient = new QueryClient();
@@ -41,6 +43,8 @@ createRoot(document.getElementById("root")!).render(
             <Route path="meal-plans" element={<MealPlansPage />} />
             <Route path="meal-plans/:id" element={<MealPlanDetailPage />} />
             <Route path="meal-plan/new" element={<MealPlanPage />} />
+            <Route path="shopping-lists" element={<ShoppingListsPage />} />
+            <Route path="shopping-lists/:id" element={<ShoppingListDetailPage />} />
             <Route path="add-recipe" element={<AddRecipePage />} />
             <Route path="add-recipe/groentenabonnement" element={<ExternalRecipesPage />} />
             <Route path="add-recipe/gebruiker" element={<AddUserPage />} />

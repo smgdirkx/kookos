@@ -10,7 +10,7 @@ import { S3_BUCKET, s3 } from "../s3.js";
 import type { AppEnv } from "../types.js";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
-const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
+const _MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 const PRESIGN_EXPIRY = 300; // 5 minutes
 
 const app = new Hono<AppEnv>();

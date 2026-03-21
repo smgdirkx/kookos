@@ -223,6 +223,10 @@ export const shoppingListItems = pgTable("shopping_list_items", {
   unit: varchar("unit", { length: 50 }),
   checked: boolean("checked").notNull().default(false),
   isExtra: boolean("is_extra").notNull().default(false),
+  recipeId: uuid("recipe_id").references(() => recipes.id, { onDelete: "set null" }),
+  isSuggested: boolean("is_suggested").notNull().default(false),
+  category: varchar("category", { length: 100 }),
+  sortOrder: integer("sort_order").notNull().default(0),
 });
 
 // ══════════════════════════════════════════════
@@ -338,5 +342,9 @@ export const shoppingListItemsRelations = relations(shoppingListItems, ({ one })
   shoppingList: one(shoppingLists, {
     fields: [shoppingListItems.shoppingListId],
     references: [shoppingLists.id],
+  }),
+  recipe: one(recipes, {
+    fields: [shoppingListItems.recipeId],
+    references: [recipes.id],
   }),
 }));

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CalendarDays, Check, Clock, Pencil, Plus } from "lucide-react";
+import { AlertTriangle, CalendarDays, Check, ChevronDown, Clock, Pencil, Plus } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Card,
@@ -127,6 +128,99 @@ function formatDate(dateStr: string) {
   });
 }
 
+function MealPlanCard({
+  plan,
+  onToggle,
+}: {
+  plan: MealPlan;
+  onToggle: (planId: string, itemId: string, checked: boolean) => void;
+}) {
+  const sortedItems = [...plan.items].sort(
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+  );
+
+  return (
+    <Card key={plan.id}>
+      <div className="flex items-center gap-2">
+        <Link to={`/meal-plans/${plan.id}`} className="flex-1 min-w-0">
+          <h2 className="font-semibold">{plan.name}</h2>
+          <p className="text-sm text-gray-400 mt-1">
+            {formatDate(plan.startDate)} – {formatDate(plan.endDate)} · {plan.servings} personen
+          </p>
+        </Link>
+        <Link
+          to={`/meal-plans/${plan.id}`}
+          className="shrink-0 p-2 text-gray-400 hover:text-primary transition-colors"
+          aria-label="Weekmenu bewerken"
+        >
+          <Pencil size={16} />
+        </Link>
+      </div>
+
+      {sortedItems.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-gray-100">
+          {sortedItems.map((item) => (
+            <CheckableItem
+              key={item.id}
+              item={item}
+              onToggle={(checked) => onToggle(plan.id, item.id, checked)}
+            />
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function MealPlanLists({
+  plans,
+  onToggle,
+}: {
+  plans: MealPlan[];
+  onToggle: (planId: string, itemId: string, checked: boolean) => void;
+}) {
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  const activePlans = plans.filter(
+    (plan) => plan.items.length === 0 || plan.items.some((item) => !item.checked),
+  );
+  const historyPlans = plans.filter(
+    (plan) => plan.items.length > 0 && plan.items.every((item) => item.checked),
+  );
+
+  return (
+    <div className="flex flex-col gap-3">
+      {activePlans.map((plan) => (
+        <MealPlanCard key={plan.id} plan={plan} onToggle={onToggle} />
+      ))}
+
+      {historyPlans.length > 0 && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setHistoryOpen(!historyOpen)}
+            className="flex items-center gap-2 w-full py-2 text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
+          >
+            <ChevronDown
+              size={16}
+              className={`transition-transform ${historyOpen ? "rotate-0" : "-rotate-90"}`}
+            />
+            Geschiedenis ({historyPlans.length})
+          </button>
+
+          {historyOpen && (
+            <div className="flex flex-col gap-3 mt-1">
+              {historyPlans.map((plan) => (
+                <MealPlanCard key={plan.id} plan={plan} onToggle={onToggle} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function MealPlansPage() {
   const queryClient = useQueryClient();
 
@@ -189,52 +283,10 @@ export function MealPlansPage() {
           description="Maak je eerste weekmenu aan!"
         />
       ) : (
-        <div className="flex flex-col gap-3">
-          {plans.map((plan) => {
-            const sortedItems = [...plan.items].sort(
-              (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-            );
-
-            return (
-              <Card key={plan.id}>
-                <div className="flex items-center gap-2">
-                  <Link to={`/meal-plans/${plan.id}`} className="flex-1 min-w-0">
-                    <h2 className="font-semibold">{plan.name}</h2>
-                    <p className="text-sm text-gray-400 mt-1">
-                      {formatDate(plan.startDate)} – {formatDate(plan.endDate)} · {plan.servings}{" "}
-                      personen
-                    </p>
-                  </Link>
-                  <Link
-                    to={`/meal-plans/${plan.id}`}
-                    className="shrink-0 p-2 text-gray-400 hover:text-primary transition-colors"
-                    aria-label="Weekmenu bewerken"
-                  >
-                    <Pencil size={16} />
-                  </Link>
-                </div>
-
-                {sortedItems.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-gray-100">
-                    {sortedItems.map((item) => (
-                      <CheckableItem
-                        key={item.id}
-                        item={item}
-                        onToggle={(checked) =>
-                          toggleMutation.mutate({
-                            planId: plan.id,
-                            itemId: item.id,
-                            checked,
-                          })
-                        }
-                      />
-                    ))}
-                  </div>
-                )}
-              </Card>
-            );
-          })}
-        </div>
+        <MealPlanLists
+          plans={plans}
+          onToggle={(planId, itemId, checked) => toggleMutation.mutate({ planId, itemId, checked })}
+        />
       )}
     </div>
   );

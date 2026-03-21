@@ -215,6 +215,18 @@ export function MealPlanDetailPage() {
     },
   });
 
+  const createShoppingListMutation = useMutation({
+    mutationFn: () =>
+      api<{ id: string }>("/api/shopping-lists", {
+        method: "POST",
+        body: { name: `Boodschappen - ${plan?.name ?? "Weekmenu"}`, mealPlanId: id },
+      }),
+    onSuccess: (newList) => {
+      queryClient.invalidateQueries({ queryKey: ["meal-plan", id] });
+      navigate(`/shopping-lists/${newList.id}`);
+    },
+  });
+
   async function deletePlan() {
     if (!(await confirm({ title: "Weekmenu verwijderen?" }))) return;
     await api(`/api/meal-plans/${id}`, { method: "DELETE" });
@@ -227,7 +239,7 @@ export function MealPlanDetailPage() {
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
   );
 
-  const shoppingItems = plan.shoppingLists.flatMap((list) => list.items);
+  const firstShoppingList = plan.shoppingLists[0] ?? null;
 
   const filteredRecipes = searchQuery
     ? recipes.filter((r) => r.title.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -375,28 +387,28 @@ export function MealPlanDetailPage() {
         </Button>
       )}
 
-      {shoppingItems.length > 0 && (
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-4">
-            <ShoppingCart size={20} className="text-secondary" />
-            <h2 className="text-xl font-semibold">Boodschappen</h2>
-          </div>
-          <Card>
-            {shoppingItems.map((item) => (
-              <div
-                key={item.id}
-                className="flex justify-between py-2 border-b border-gray-50 last:border-0"
-              >
-                <span className="text-sm">
-                  {[item.amount, item.unit, item.name]
-                    .filter((v) => v && !v.startsWith("<"))
-                    .join(" ")}
-                </span>
-              </div>
-            ))}
-          </Card>
-        </div>
-      )}
+      <div className="mb-8">
+        {firstShoppingList ? (
+          <Link
+            to={`/shopping-lists/${firstShoppingList.id}`}
+            className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-secondary border border-secondary/30 rounded-xl hover:bg-secondary/5 transition-colors"
+          >
+            <ShoppingCart size={16} />
+            Boodschappenlijst bekijken
+          </Link>
+        ) : (
+          plan.items.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              icon={ShoppingCart}
+              onClick={() => createShoppingListMutation.mutate()}
+            >
+              Boodschappenlijst maken
+            </Button>
+          )
+        )}
+      </div>
 
       <div className="pt-4 border-t">
         <Button
