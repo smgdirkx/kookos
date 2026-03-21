@@ -3,6 +3,7 @@ import {
   createRecipeSchema,
   generateMealPlanSchema,
   importRecipeSchema,
+  ingredientCategories,
   pasteRecipeSchema,
   scanRecipeSchema,
 } from "@kookos/shared";
@@ -61,7 +62,7 @@ const recipeTool: Anthropic.Tool = {
               type: "string",
               enum: ["hoofdgroenten", "aromaten", "basis", "eiwitten", "overig"],
               description:
-                "Rol in het gerecht: hoofdgroenten = groenten waar het gerecht om draait (bijv. pompoen, bloemkool, aubergine), aromaten = smaakmakers (ui, knoflook, gember, kruiden, specerijen), basis = koolhydraatdrager (pasta, rijst, aardappel, brood), eiwitten = proteïnebron (tofu, linzen, kikkererwten, eieren, kaas), overig = voorraadkast (olie, sauzen, bouillon, blikken)",
+                "Rol van dit ingrediënt in het gerecht. MOET een van de enum-waarden zijn — gebruik GEEN andere waarden zoals 'bijgerecht', 'hoofdgerecht' etc. hoofdgroenten = groenten waar het gerecht om draait (bijv. pompoen, bloemkool, aubergine), aromaten = smaakmakers (ui, knoflook, gember, kruiden, specerijen), basis = koolhydraatdrager (pasta, rijst, aardappel, brood), eiwitten = proteïnebron (tofu, linzen, kikkererwten, eieren, kaas), overig = alles wat niet in bovenstaande past",
             },
             isSuggested: {
               type: "boolean",
@@ -220,6 +221,19 @@ async function saveRecipeFromAi(
     extraTags?: string[];
   },
 ): Promise<{ id: string }> {
+  // Sanitize ingredient categories — AI sometimes returns invalid values
+  const validCategories = new Set<string>(ingredientCategories);
+  if (Array.isArray(aiResult.ingredients)) {
+    for (const ing of aiResult.ingredients) {
+      if (ing && typeof ing === "object" && "category" in ing) {
+        const rec = ing as Record<string, unknown>;
+        if (typeof rec.category !== "string" || !validCategories.has(rec.category)) {
+          rec.category = "overig";
+        }
+      }
+    }
+  }
+
   const parsed = createRecipeSchema.safeParse(aiResult);
   if (!parsed.success)
     throw new Error(`Invalid recipe data: ${JSON.stringify(parsed.error.flatten())}`);
