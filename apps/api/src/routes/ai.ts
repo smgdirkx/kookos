@@ -355,7 +355,7 @@ app.post("/scan", async (c) => {
     scanMediaType: parsed.data.mediaType,
     dishImage: parsed.data.dishImage,
     dishMediaType: parsed.data.dishMediaType,
-    extraTags: parsed.data.extraTags,
+    extraTags: ["gescand", ...(parsed.data.extraTags ?? [])],
   });
 
   return c.json(saved, 201);
@@ -404,10 +404,14 @@ app.post("/import", async (c) => {
   logAi("import", parsed.data.url, message);
   const aiResult = getToolInput(message) as Record<string, unknown>;
 
+  // Auto-tag with base domain (e.g. "ah.nl", "groentenabonnement.nl")
+  const hostname = new URL(parsed.data.url).hostname.replace(/^www\./, "");
+
   const saved = await saveRecipeFromAi(aiResult, user.id, {
     source: "url",
     sourceUrl: parsed.data.url,
     imageUrl: ogImage,
+    extraTags: [hostname],
   });
 
   return c.json(saved, 201);
@@ -438,6 +442,7 @@ app.post("/paste", async (c) => {
 
   const saved = await saveRecipeFromAi(aiResult, user.id, {
     source: "manual",
+    extraTags: ["geplakt"],
   });
 
   return c.json(saved, 201);
