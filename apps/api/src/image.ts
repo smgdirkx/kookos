@@ -1,17 +1,24 @@
 import crypto from "node:crypto";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
+import sharp from "sharp";
 import { S3_BUCKET, s3 } from "./s3.js";
 
-const ALLOWED_EXTENSIONS: Record<string, string> = {
-  "image/jpeg": "jpeg",
-  "image/png": "png",
-  "image/webp": "webp",
-  "image/avif": "avif",
-  "image/gif": "gif",
-};
+const MAX_DIMENSION = 1200;
+const WEBP_QUALITY = 90;
 
 /**
- * Uploads a base64-encoded image to S3.
+ * Comprimeert een afbeelding naar webp (max 1200px, quality 0.9).
+ * Retourneert de gecomprimeerde buffer.
+ */
+async function compressToWebp(input: Buffer): Promise<Buffer> {
+  return sharp(input)
+    .resize(MAX_DIMENSION, MAX_DIMENSION, { fit: "inside", withoutEnlargement: true })
+    .webp({ quality: WEBP_QUALITY })
+    .toBuffer();
+}
+
+/**
+ * Uploads a base64-encoded image to S3 (compressed to webp).
  * Returns the S3 key, or null if the upload fails.
  */
 export async function uploadBase64Image(
@@ -20,16 +27,16 @@ export async function uploadBase64Image(
   recipeId: string,
 ): Promise<string | null> {
   try {
-    const ext = ALLOWED_EXTENSIONS[mediaType] ?? "jpeg";
-    const buffer = Buffer.from(base64, "base64");
-    const key = `recipes/${recipeId}/${crypto.randomUUID()}.${ext}`;
+    const raw = Buffer.from(base64, "base64");
+    const buffer = await compressToWebp(raw);
+    const key = `recipes/${recipeId}/${crypto.randomUUID()}.webp`;
 
     await s3.send(
       new PutObjectCommand({
         Bucket: S3_BUCKET,
         Key: key,
         Body: buffer,
-        ContentType: mediaType,
+        ContentType: "image/webp",
       }),
     );
 
@@ -41,7 +48,7 @@ export async function uploadBase64Image(
 }
 
 /**
- * Downloads an external image and uploads it to S3.
+ * Downloads an external image, compresses to webp, and uploads to S3.
  * Returns the S3 key, or null if the download/upload fails.
  */
 export async function uploadExternalImage(
@@ -52,18 +59,16 @@ export async function uploadExternalImage(
     const response = await fetch(externalUrl);
     if (!response.ok) return null;
 
-    const contentType = response.headers.get("content-type")?.split(";")[0] ?? "image/jpeg";
-    const ext = ALLOWED_EXTENSIONS[contentType] ?? "jpeg";
-    const buffer = Buffer.from(await response.arrayBuffer());
-
-    const key = `recipes/${recipeId}/${crypto.randomUUID()}.${ext}`;
+    const raw = Buffer.from(await response.arrayBuffer());
+    const buffer = await compressToWebp(raw);
+    const key = `recipes/${recipeId}/${crypto.randomUUID()}.webp`;
 
     await s3.send(
       new PutObjectCommand({
         Bucket: S3_BUCKET,
         Key: key,
         Body: buffer,
-        ContentType: contentType,
+        ContentType: "image/webp",
       }),
     );
 

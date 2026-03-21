@@ -7,7 +7,7 @@ import {
   pasteRecipeSchema,
   scanRecipeSchema,
 } from "@kookos/shared";
-import { eq } from "drizzle-orm";
+import { and, eq, notInArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../db/index.js";
 import { recipeImages, recipeIngredients, recipes, recipeTags, tags } from "../db/schema.js";
@@ -469,16 +469,39 @@ app.post("/meal-plan", async (c) => {
   const parsed = generateMealPlanSchema.safeParse(body);
   if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
 
-  const userRecipes = await db.query.recipes.findMany({
-    where: eq(recipes.userId, user.id),
+  // Pre-filter recipes: tsvector search for matching ingredients, plus random extras for variety
+  const { availableIngredients } = parsed.data;
+  const tsQueries = availableIngredients.map((ing) => sql`plainto_tsquery('dutch', ${ing})`);
+  const combinedTsQuery = sql.join(tsQueries, sql` || `);
+
+  const matchedRecipes = await db.query.recipes.findMany({
+    where: sql`${recipes.userId} = ${user.id} AND ${recipes.searchVector} @@ (${combinedTsQuery})`,
     with: { ingredients: true, images: true },
   });
+
+  const matchedIds = new Set(matchedRecipes.map((r) => r.id));
+
+  // Add extra non-matching recipes for variety (up to 20)
+  const extraRecipes =
+    matchedRecipes.length < 50
+      ? await db.query.recipes.findMany({
+          where:
+            matchedIds.size > 0
+              ? and(eq(recipes.userId, user.id), notInArray(recipes.id, [...matchedIds]))
+              : eq(recipes.userId, user.id),
+          with: { ingredients: true, images: true },
+          limit: 20,
+        })
+      : [];
+
+  const userRecipes = [...matchedRecipes, ...extraRecipes];
 
   const recipeSummaries = userRecipes.map((r) => ({
     id: r.id,
     title: r.title,
     servings: r.servings,
     ingredients: r.ingredients?.map((i) => i.name).join(", "),
+    matchesIngredients: matchedIds.has(r.id),
   }));
 
   // Build lookups for enriching AI response

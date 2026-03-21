@@ -38,7 +38,7 @@ import {
 } from "@/components/ui";
 import { api } from "@/lib/api";
 import { generateMealPlanName } from "@/lib/date";
-import { compressImage } from "@/lib/image";
+import { compressPhoto } from "@/lib/image";
 
 type Ingredient = {
   id: string;
@@ -577,7 +577,7 @@ export function RecipePage() {
       if (!id) return;
       setUploading(true);
       try {
-        const { base64, mediaType } = await compressImage(file);
+        const { base64, mediaType } = await compressPhoto(file);
         const blob = await fetch(`data:${mediaType};base64,${base64}`).then((r) => r.blob());
 
         const { uploadUrl, key } = await api<{ uploadUrl: string; key: string }>(

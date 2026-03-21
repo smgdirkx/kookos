@@ -1,26 +1,33 @@
 import heic2any from "heic2any";
 
-const MAX_DIMENSION = 1568;
+const MAX_DIMENSION_SCAN = 1568; // Claude API limiet
+const MAX_DIMENSION_PHOTO = 1200; // Gerechtfoto's
 
-export async function compressImage(file: File): Promise<{ base64: string; mediaType: string }> {
-  // HEIC/HEIF: converteer eerst naar JPEG via heic2any
-  let imageBlob: Blob = file;
-  if (
+function isHeic(file: File): boolean {
+  return (
     file.type === "image/heic" ||
     file.type === "image/heif" ||
     file.name.toLowerCase().endsWith(".heic")
-  ) {
-    const converted = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.85 });
-    imageBlob = Array.isArray(converted) ? converted[0] : converted;
-  }
+  );
+}
 
+async function convertHeic(file: File): Promise<Blob> {
+  const converted = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.85 });
+  return Array.isArray(converted) ? converted[0] : converted;
+}
+
+function resizeAndEncode(
+  blob: Blob,
+  maxDimension: number,
+  quality: number,
+): Promise<{ base64: string; mediaType: string }> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    const url = URL.createObjectURL(imageBlob);
+    const url = URL.createObjectURL(blob);
     img.onload = () => {
       let { naturalWidth: w, naturalHeight: h } = img;
-      if (w > MAX_DIMENSION || h > MAX_DIMENSION) {
-        const scale = MAX_DIMENSION / Math.max(w, h);
+      if (w > maxDimension || h > maxDimension) {
+        const scale = maxDimension / Math.max(w, h);
         w = Math.round(w * scale);
         h = Math.round(h * scale);
       }
@@ -35,9 +42,9 @@ export async function compressImage(file: File): Promise<{ base64: string; media
       }
       ctx.drawImage(img, 0, 0, w, h);
       // Safari ondersteunt geen webp canvas export, fallback naar jpeg
-      const webpUrl = canvas.toDataURL("image/webp", 0.8);
+      const webpUrl = canvas.toDataURL("image/webp", quality);
       const isWebp = webpUrl.startsWith("data:image/webp");
-      const dataUrl = isWebp ? webpUrl : canvas.toDataURL("image/jpeg", 0.85);
+      const dataUrl = isWebp ? webpUrl : canvas.toDataURL("image/jpeg", quality);
       const mediaType = isWebp ? "image/webp" : "image/jpeg";
       URL.revokeObjectURL(url);
       resolve({ base64: dataUrl.split(",")[1], mediaType });
@@ -48,4 +55,16 @@ export async function compressImage(file: File): Promise<{ base64: string; media
     };
     img.src = url;
   });
+}
+
+/** Comprimeer afbeelding voor AI scan (max 1568px, quality 0.8) */
+export async function compressImage(file: File): Promise<{ base64: string; mediaType: string }> {
+  const blob = isHeic(file) ? await convertHeic(file) : file;
+  return resizeAndEncode(blob, MAX_DIMENSION_SCAN, 0.8);
+}
+
+/** Comprimeer gerechtfoto voor opslag (max 1200px, webp quality 0.9) */
+export async function compressPhoto(file: File): Promise<{ base64: string; mediaType: string }> {
+  const blob = isHeic(file) ? await convertHeic(file) : file;
+  return resizeAndEncode(blob, MAX_DIMENSION_PHOTO, 0.9);
 }
