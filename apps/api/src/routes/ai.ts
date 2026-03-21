@@ -182,13 +182,17 @@ async function saveRecipeFromAi(
     dishImage?: string;
     dishMediaType?: string;
     imageUrl?: string;
+    extraTags?: string[];
   },
 ): Promise<{ id: string }> {
   const parsed = createRecipeSchema.safeParse(aiResult);
   if (!parsed.success)
     throw new Error(`Invalid recipe data: ${JSON.stringify(parsed.error.flatten())}`);
 
-  const { ingredients, tags: tagNames, ...recipeData } = parsed.data;
+  const { ingredients, tags: aiTags, ...recipeData } = parsed.data;
+
+  // Merge AI-generated tags with user-supplied extra tags (deduplicated)
+  const tagNames = [...new Set([...(aiTags ?? []), ...(opts.extraTags ?? [])])];
 
   const [recipe] = await db
     .insert(recipes)
@@ -316,6 +320,7 @@ app.post("/scan", async (c) => {
     scanMediaType: parsed.data.mediaType,
     dishImage: parsed.data.dishImage,
     dishMediaType: parsed.data.dishMediaType,
+    extraTags: parsed.data.extraTags,
   });
 
   return c.json(saved, 201);

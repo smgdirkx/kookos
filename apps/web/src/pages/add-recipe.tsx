@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { TagInput } from "@/components/tag-input";
 import { Button, Input, Loading, PageHeader, Textarea, useConfirm } from "@/components/ui";
 import { api } from "@/lib/api";
 import { compressImage } from "@/lib/image";
@@ -41,6 +42,7 @@ export function AddRecipePage() {
   // Scan state
   const [recipePhoto, setRecipePhoto] = useState<CompressedImage | null>(null);
   const [dishPhoto, setDishPhoto] = useState<CompressedImage | null>(null);
+  const [scanTags, setScanTags] = useState<string[]>([]);
   const [compressing, setCompressing] = useState(false);
   const [backgroundTasks, setBackgroundTasks] = useState<BackgroundTask[]>([]);
 
@@ -54,13 +56,14 @@ export function AddRecipePage() {
     setBackgroundTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...update } : t)));
   }
 
-  async function submitScan(photo: CompressedImage, dish: CompressedImage | null) {
+  async function submitScan(photo: CompressedImage, dish: CompressedImage | null, tags: string[]) {
     const saved = await api<{ id: string }>("/api/ai/scan", {
       method: "POST",
       body: {
         image: photo.base64,
         mediaType: photo.mediaType,
         ...(dish ? { dishImage: dish.base64, dishMediaType: dish.mediaType } : {}),
+        ...(tags.length ? { extraTags: tags } : {}),
       },
     });
     queryClient.invalidateQueries({ queryKey: ["recipes"] });
@@ -84,7 +87,7 @@ export function AddRecipePage() {
     setStatus("AI analyseert je foto...");
 
     try {
-      const saved = await submitScan(recipePhoto, dishPhoto);
+      const saved = await submitScan(recipePhoto, dishPhoto, scanTags);
       navigate(`/recipe/${saved.id}`, { replace: true });
     } catch (err: unknown) {
       setStatus(`Fout: ${err instanceof Error ? err.message : "Onbekende fout"}`);
@@ -98,15 +101,16 @@ export function AddRecipePage() {
     const taskId = ++taskIdCounter;
     const photo = recipePhoto;
     const dish = dishPhoto;
+    const tags = [...scanTags];
 
     setBackgroundTasks((prev) => [...prev, { id: taskId, status: "processing" }]);
 
-    // Reset for next scan
+    // Reset photos for next scan (tags blijven staan)
     setRecipePhoto(null);
     setDishPhoto(null);
 
     // Process in background
-    submitScan(photo, dish)
+    submitScan(photo, dish, tags)
       .then((saved) => updateTask(taskId, { status: "done", recipeId: saved.id }))
       .catch((err: unknown) =>
         updateTask(taskId, {
@@ -349,6 +353,14 @@ export function AddRecipePage() {
                     </button>
                   )}
                 </div>
+              </div>
+
+              {/* Tags (e.g. cookbook name) */}
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-gray-500">
+                  Tags <span className="text-gray-400">(bijv. kookboek)</span>
+                </p>
+                <TagInput value={scanTags} onChange={setScanTags} />
               </div>
 
               {/* Action buttons — only when recipe photo is selected */}
