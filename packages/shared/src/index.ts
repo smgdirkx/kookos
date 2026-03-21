@@ -4,7 +4,7 @@ import { z } from "zod";
 const optionalNumber = z
   .union([z.number(), z.string()])
   .transform((val) => {
-    if (typeof val === "number") return val;
+    if (typeof val === "number") return Math.round(val);
     const n = parseInt(val, 10);
     return Number.isNaN(n) ? undefined : n;
   })
@@ -122,8 +122,10 @@ export const importRecipeSchema = z.object({
 });
 
 export const scanRecipeSchema = z.object({
-  image: z.string(), // base64 encoded
-  mediaType: z.string(), // origineel MIME type van de afbeelding
+  image: z.string(), // base64 encoded recipe photo
+  mediaType: z.string(), // MIME type van de receptfoto
+  dishImage: z.string().optional(), // base64 encoded dish photo
+  dishMediaType: z.string().optional(), // MIME type van de gerechtfoto
 });
 
 export const pasteRecipeSchema = z.object({

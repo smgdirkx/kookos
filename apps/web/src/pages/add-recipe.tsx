@@ -1,21 +1,35 @@
 import { useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen,
-  Camera,
+  Check,
+  ChevronRight,
   ClipboardPaste,
   Globe,
   ImagePlus,
   Leaf,
   Link as LinkIcon,
+  Loader2,
   Sparkles,
+  X,
 } from "lucide-react";
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button, Input, Loading, PageHeader, Textarea } from "@/components/ui";
+import { Button, Input, Loading, PageHeader, Textarea, useConfirm } from "@/components/ui";
 import { api } from "@/lib/api";
 import { compressImage } from "@/lib/image";
 
 type Step = "choose" | "scan" | "import" | "paste";
+
+type CompressedImage = { base64: string; mediaType: string };
+
+type BackgroundTask = {
+  id: number;
+  status: "processing" | "done" | "error";
+  recipeId?: string;
+  error?: string;
+};
+
+let taskIdCounter = 0;
 
 export function AddRecipePage() {
   const [step, setStep] = useState<Step>("choose");
@@ -23,34 +37,107 @@ export function AddRecipePage() {
   const [status, setStatus] = useState("");
   const [url, setUrl] = useState("");
   const [pasteText, setPasteText] = useState("");
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Scan state
+  const [recipePhoto, setRecipePhoto] = useState<CompressedImage | null>(null);
+  const [dishPhoto, setDishPhoto] = useState<CompressedImage | null>(null);
+  const [compressing, setCompressing] = useState(false);
+  const [backgroundTasks, setBackgroundTasks] = useState<BackgroundTask[]>([]);
+
+  const recipeInputRef = useRef<HTMLInputElement>(null);
+  const dishInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [confirm, confirmModal] = useConfirm();
 
-  async function handlePhoto(file: File) {
+  function updateTask(id: number, update: Partial<BackgroundTask>) {
+    setBackgroundTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...update } : t)));
+  }
+
+  async function submitScan(photo: CompressedImage, dish: CompressedImage | null) {
+    const saved = await api<{ id: string }>("/api/ai/scan", {
+      method: "POST",
+      body: {
+        image: photo.base64,
+        mediaType: photo.mediaType,
+        ...(dish ? { dishImage: dish.base64, dishMediaType: dish.mediaType } : {}),
+      },
+    });
+    queryClient.invalidateQueries({ queryKey: ["recipes"] });
+    return saved;
+  }
+
+  async function confirmNoDishPhoto(): Promise<boolean> {
+    if (dishPhoto) return true;
+    return confirm({
+      title: "Geen foto van het gerecht",
+      description: "Weet je zeker dat je door wilt zonder foto van het gerecht?",
+      confirmLabel: "Doorgaan",
+      variant: "primary",
+    });
+  }
+
+  async function handleGenerate() {
+    if (!recipePhoto) return;
+    if (!(await confirmNoDishPhoto())) return;
     setLoading(true);
-    setStatus("Foto verwerken...");
+    setStatus("AI analyseert je foto...");
 
     try {
-      const { base64, mediaType } = await compressImage(file);
-      setStatus("AI analyseert je foto...");
-
-      const recipe = await api<Record<string, unknown>>("/api/ai/scan", {
-        method: "POST",
-        body: { image: base64, mediaType },
-      });
-
-      const saved = await api<{ id: string }>("/api/recipes", {
-        method: "POST",
-        body: { ...recipe, source: "scan", scanImage: base64, scanMediaType: mediaType },
-      });
-
-      queryClient.invalidateQueries({ queryKey: ["recipes"] });
+      const saved = await submitScan(recipePhoto, dishPhoto);
       navigate(`/recipe/${saved.id}`, { replace: true });
     } catch (err: unknown) {
       setStatus(`Fout: ${err instanceof Error ? err.message : "Onbekende fout"}`);
       setLoading(false);
     }
+  }
+
+  async function handleGenerateAndNext() {
+    if (!recipePhoto) return;
+    if (!(await confirmNoDishPhoto())) return;
+    const taskId = ++taskIdCounter;
+    const photo = recipePhoto;
+    const dish = dishPhoto;
+
+    setBackgroundTasks((prev) => [...prev, { id: taskId, status: "processing" }]);
+
+    // Reset for next scan
+    setRecipePhoto(null);
+    setDishPhoto(null);
+
+    // Process in background
+    submitScan(photo, dish)
+      .then((saved) => updateTask(taskId, { status: "done", recipeId: saved.id }))
+      .catch((err: unknown) =>
+        updateTask(taskId, {
+          status: "error",
+          error: err instanceof Error ? err.message : "Onbekende fout",
+        }),
+      );
+  }
+
+  async function handlePhotoSelect(file: File, type: "recipe" | "dish") {
+    setCompressing(true);
+    try {
+      const compressed = await compressImage(file);
+      if (type === "recipe") {
+        setRecipePhoto(compressed);
+      } else {
+        setDishPhoto(compressed);
+      }
+    } catch (err: unknown) {
+      setStatus(
+        `Fout bij verwerken foto: ${err instanceof Error ? err.message : "Onbekende fout"}`,
+      );
+    } finally {
+      setCompressing(false);
+    }
+  }
+
+  function openFilePicker(ref: React.RefObject<HTMLInputElement | null>) {
+    if (!ref.current) return;
+    ref.current.value = "";
+    ref.current.click();
   }
 
   async function handleImport(e: React.FormEvent) {
@@ -60,14 +147,9 @@ export function AddRecipePage() {
     setStatus("Recept importeren van website...");
 
     try {
-      const recipe = await api<Record<string, unknown>>("/api/ai/import", {
+      const saved = await api<{ id: string }>("/api/ai/import", {
         method: "POST",
         body: { url },
-      });
-
-      const saved = await api<{ id: string }>("/api/recipes", {
-        method: "POST",
-        body: { ...recipe, source: "url", sourceUrl: url },
       });
 
       queryClient.invalidateQueries({ queryKey: ["recipes"] });
@@ -85,14 +167,9 @@ export function AddRecipePage() {
     setStatus("Tekst analyseren met AI...");
 
     try {
-      const recipe = await api<Record<string, unknown>>("/api/ai/paste", {
+      const saved = await api<{ id: string }>("/api/ai/paste", {
         method: "POST",
         body: { text: pasteText },
-      });
-
-      const saved = await api<{ id: string }>("/api/recipes", {
-        method: "POST",
-        body: { ...recipe, source: "manual" },
       });
 
       queryClient.invalidateQueries({ queryKey: ["recipes"] });
@@ -108,7 +185,11 @@ export function AddRecipePage() {
     setUrl("");
     setPasteText("");
     setStatus("");
+    setRecipePhoto(null);
+    setDishPhoto(null);
   }
+
+  const processingCount = backgroundTasks.filter((t) => t.status === "processing").length;
 
   return (
     <div>
@@ -177,50 +258,157 @@ export function AddRecipePage() {
       )}
 
       {!loading && step === "scan" && (
-        <section>
+        <section className="space-y-4">
+          {/* Hidden file inputs */}
           <input
-            ref={fileInputRef}
+            ref={recipeInputRef}
             type="file"
             accept="image/*"
-            capture="environment"
             onChange={(e) => {
               const file = e.target.files?.[0];
-              console.log("[scan] file selected", file?.type, file?.size);
-              if (file) handlePhoto(file);
+              if (file) handlePhotoSelect(file, "recipe");
+            }}
+            className="hidden"
+          />
+          <input
+            ref={dishInputRef}
+            type="file"
+            accept="image/*"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handlePhotoSelect(file, "dish");
             }}
             className="hidden"
           />
 
-          <div className="flex gap-3">
-            <Button
-              variant="cta"
-              size="lg"
-              icon={Camera}
-              fullWidth
-              onClick={() => {
-                if (fileInputRef.current) {
-                  fileInputRef.current.capture = "environment";
-                  fileInputRef.current.click();
-                }
-              }}
-            >
-              Maak foto
-            </Button>
-            <Button
-              variant="outline"
-              size="lg"
-              icon={ImagePlus}
-              fullWidth
-              onClick={() => {
-                if (fileInputRef.current) {
-                  fileInputRef.current.removeAttribute("capture");
-                  fileInputRef.current.click();
-                }
-              }}
-            >
-              Bibliotheek
-            </Button>
-          </div>
+          {compressing && <Loading message="Foto verwerken..." />}
+
+          {!compressing && (
+            <>
+              {/* Two photo slots side by side */}
+              <div className="flex gap-3">
+                {/* Recipe text photo */}
+                <div className="flex-1 space-y-1.5">
+                  <p className="text-xs font-medium text-gray-500">Recepttekst</p>
+                  {recipePhoto ? (
+                    <div className="relative">
+                      <img
+                        src={`data:${recipePhoto.mediaType};base64,${recipePhoto.base64}`}
+                        alt="Recept"
+                        className="w-full aspect-[3/4] object-cover rounded-xl border border-gray-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setRecipePhoto(null)}
+                        className="absolute top-1.5 right-1.5 p-1 bg-white/90 rounded-full shadow-sm"
+                      >
+                        <X className="w-3.5 h-3.5 text-gray-600" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => openFilePicker(recipeInputRef)}
+                      className="w-full aspect-[3/4] rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-orange-300 hover:text-orange-400 transition-colors"
+                    >
+                      <BookOpen className="w-6 h-6" />
+                      <span className="text-xs">Foto van tekst</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Dish photo (optional) */}
+                <div className="flex-1 space-y-1.5">
+                  <p className="text-xs font-medium text-gray-500">
+                    Foto gerecht <span className="text-gray-400">(optioneel)</span>
+                  </p>
+                  {dishPhoto ? (
+                    <div className="relative">
+                      <img
+                        src={`data:${dishPhoto.mediaType};base64,${dishPhoto.base64}`}
+                        alt="Gerecht"
+                        className="w-full aspect-[3/4] object-cover rounded-xl border border-gray-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setDishPhoto(null)}
+                        className="absolute top-1.5 right-1.5 p-1 bg-white/90 rounded-full shadow-sm"
+                      >
+                        <X className="w-3.5 h-3.5 text-gray-600" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => openFilePicker(dishInputRef)}
+                      className="w-full aspect-[3/4] rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-orange-300 hover:text-orange-400 transition-colors"
+                    >
+                      <ImagePlus className="w-6 h-6" />
+                      <span className="text-xs">Foto van gerecht</span>
+                      <span className="text-[10px] text-gray-300">Aanbevolen</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Action buttons — only when recipe photo is selected */}
+              {recipePhoto && (
+                <>
+                  <hr className="border-gray-200" />
+                  <div className="flex gap-3">
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      icon={Sparkles}
+                      fullWidth
+                      onClick={handleGenerate}
+                    >
+                      Importeer en bekijk
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="lg"
+                      icon={ChevronRight}
+                      fullWidth
+                      onClick={handleGenerateAndNext}
+                    >
+                      Nog eentje
+                    </Button>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {/* Background tasks */}
+          {backgroundTasks.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-gray-500">
+                Verwerking{processingCount > 0 && ` (${processingCount} bezig)`}
+              </p>
+              {backgroundTasks.map((task) => (
+                <div
+                  key={task.id}
+                  className="flex items-center gap-3 p-2.5 bg-white rounded-lg border border-gray-200"
+                >
+                  {task.status === "processing" && (
+                    <Loader2 className="w-4 h-4 text-orange-500 animate-spin flex-shrink-0" />
+                  )}
+                  {task.status === "done" && (
+                    <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
+                  )}
+                  {task.status === "error" && <X className="w-4 h-4 text-red-500 flex-shrink-0" />}
+                  <span className="text-sm text-gray-700 flex-1">
+                    {task.status === "processing" && "AI analyseert..."}
+                    {task.status === "done" && "Recept opgeslagen"}
+                    {task.status === "error" && `Fout: ${task.error}`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {status && !compressing && <p className="text-sm text-red-500 text-center">{status}</p>}
         </section>
       )}
 
@@ -270,6 +458,7 @@ export function AddRecipePage() {
           </form>
         </section>
       )}
+      {confirmModal}
     </div>
   );
 }

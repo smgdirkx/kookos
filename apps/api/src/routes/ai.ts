@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import {
+  createRecipeSchema,
   generateMealPlanSchema,
   importRecipeSchema,
   pasteRecipeSchema,
@@ -8,7 +9,8 @@ import {
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../db/index.js";
-import { recipes } from "../db/schema.js";
+import { recipeImages, recipeIngredients, recipes, recipeTags, tags } from "../db/schema.js";
+import { uploadBase64Image, uploadExternalImage } from "../image.js";
 import { requireAuth } from "../middleware.js";
 import { cleanHtml, extractJsonLd, fetchPage } from "../services/fetch-page.js";
 import type { AppEnv } from "../types.js";
@@ -120,6 +122,11 @@ const mealPlanTool: Anthropic.Tool = {
 
 // ── Helpers ──
 
+function createMessage(params: Omit<Anthropic.MessageCreateParamsNonStreaming, "model">) {
+  const model = process.env.CLAUDE_MODEL || "claude-sonnet-4-6";
+  return anthropic.messages.create({ model, ...params });
+}
+
 function logAi(route: string, input: string, response: Anthropic.Message) {
   const toolUse = response.content.find((b) => b.type === "tool_use");
   console.log(
@@ -156,16 +163,124 @@ SUGGESTIES:
 - VERPLICHT: Controleer of het recept een basis (koolhydraat) en een eiwit bevat. Kijk in ZOWEL de ingrediëntenlijst als de bereidingstekst. Als een van deze categorieën volledig ontbreekt, MOET je minstens één passend vegetarisch ingrediënt suggereren met isSuggested=true. Een compleet gerecht heeft altijd een koolhydraat én een eiwitbron — sla dit NOOIT over.
 - Ingrediënten die WEL expliciet in de originele ingrediëntenlijst staan krijgen isSuggested=false (of laat het veld weg).`;
 
+// ── Helpers (recipe saving) ──
+
+/** Strip AI placeholder values like "<UNKNOWN>" from ingredient fields */
+function cleanIngredientField(value: string | undefined): string | undefined {
+  if (!value || value.startsWith("<")) return undefined;
+  return value;
+}
+
+async function saveRecipeFromAi(
+  aiResult: Record<string, unknown>,
+  userId: string,
+  opts: {
+    source: "scan" | "url" | "manual";
+    sourceUrl?: string;
+    scanImage?: string;
+    scanMediaType?: string;
+    dishImage?: string;
+    dishMediaType?: string;
+    imageUrl?: string;
+  },
+): Promise<{ id: string }> {
+  const parsed = createRecipeSchema.safeParse(aiResult);
+  if (!parsed.success)
+    throw new Error(`Invalid recipe data: ${JSON.stringify(parsed.error.flatten())}`);
+
+  const { ingredients, tags: tagNames, ...recipeData } = parsed.data;
+
+  const [recipe] = await db
+    .insert(recipes)
+    .values({ ...recipeData, source: opts.source, sourceUrl: opts.sourceUrl, userId })
+    .returning();
+
+  // Insert ingredients
+  if (ingredients?.length) {
+    await db.insert(recipeIngredients).values(
+      ingredients.map((ing, i) => ({
+        recipeId: recipe.id,
+        name: ing.name,
+        amount: cleanIngredientField(ing.amount),
+        unit: cleanIngredientField(ing.unit),
+        category: ing.category,
+        isOptional: ing.isOptional,
+        isSuggested: ing.isSuggested,
+        sortOrder: ing.sortOrder ?? i,
+      })),
+    );
+  }
+
+  // Upload scan photo to S3 (original scan, not shown in gallery)
+  if (opts.scanImage && opts.scanMediaType) {
+    const s3Key = await uploadBase64Image(opts.scanImage, opts.scanMediaType, recipe.id);
+    if (s3Key) {
+      await db.insert(recipeImages).values({
+        recipeId: recipe.id,
+        url: s3Key,
+        isPrimary: false,
+        caption: "scan-original",
+      });
+    }
+  }
+
+  // Upload dish photo to S3 (display image)
+  if (opts.dishImage && opts.dishMediaType) {
+    const s3Key = await uploadBase64Image(opts.dishImage, opts.dishMediaType, recipe.id);
+    if (s3Key) {
+      await db.insert(recipeImages).values({
+        recipeId: recipe.id,
+        url: s3Key,
+        isPrimary: true,
+      });
+    }
+  }
+
+  // Download external image to S3
+  if (opts.imageUrl) {
+    const s3Key = await uploadExternalImage(opts.imageUrl, recipe.id);
+    if (s3Key) {
+      await db.insert(recipeImages).values({
+        recipeId: recipe.id,
+        url: s3Key,
+        isPrimary: true,
+      });
+    }
+  }
+
+  // Trigger search vector rebuild after ingredients are inserted
+  if (ingredients?.length) {
+    await db.update(recipes).set({ updatedAt: new Date() }).where(eq(recipes.id, recipe.id));
+  }
+
+  // Insert tags
+  if (tagNames?.length) {
+    for (const tagName of tagNames) {
+      const [tag] = await db
+        .insert(tags)
+        .values({ name: tagName })
+        .onConflictDoNothing()
+        .returning();
+      const existingTag = tag ?? (await db.query.tags.findFirst({ where: eq(tags.name, tagName) }));
+      if (existingTag) {
+        await db.insert(recipeTags).values({ recipeId: recipe.id, tagId: existingTag.id });
+      }
+    }
+  }
+
+  return { id: recipe.id };
+}
+
 // ── Routes ──
 
-// Scan recipe from photo (Claude Vision)
+// Scan recipe from photo and save directly
 app.post("/scan", async (c) => {
+  const user = c.get("user")!;
   const body = await c.req.json();
   const parsed = scanRecipeSchema.safeParse(body);
   if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
 
-  const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
+  const message = await createMessage({
     max_tokens: 4096,
     system: RECIPE_SYSTEM_PROMPT,
     tools: [recipeTool],
@@ -193,11 +308,22 @@ app.post("/scan", async (c) => {
   });
 
   logAi("scan", "photo upload", message);
-  return c.json(getToolInput(message));
+  const aiResult = getToolInput(message) as Record<string, unknown>;
+
+  const saved = await saveRecipeFromAi(aiResult, user.id, {
+    source: "scan",
+    scanImage: parsed.data.image,
+    scanMediaType: parsed.data.mediaType,
+    dishImage: parsed.data.dishImage,
+    dishMediaType: parsed.data.dishMediaType,
+  });
+
+  return c.json(saved, 201);
 });
 
-// Import recipe from URL
+// Import recipe from URL and save directly
 app.post("/import", async (c) => {
+  const user = c.get("user")!;
   const body = await c.req.json();
   const parsed = importRecipeSchema.safeParse(body);
   if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
@@ -222,8 +348,7 @@ app.post("/import", async (c) => {
     promptContent = `Extraheer het recept uit deze webpagina.\n\nURL: ${parsed.data.url}\n\nHTML:\n${cleaned}`;
   }
 
-  const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
+  const message = await createMessage({
     max_tokens: 4096,
     system: RECIPE_SYSTEM_PROMPT,
     tools: [recipeTool],
@@ -237,21 +362,25 @@ app.post("/import", async (c) => {
   });
 
   logAi("import", parsed.data.url, message);
-  const recipe = getToolInput(message) as Record<string, unknown>;
-  if (ogImage) {
-    recipe.imageUrl = ogImage;
-  }
-  return c.json(recipe);
+  const aiResult = getToolInput(message) as Record<string, unknown>;
+
+  const saved = await saveRecipeFromAi(aiResult, user.id, {
+    source: "url",
+    sourceUrl: parsed.data.url,
+    imageUrl: ogImage,
+  });
+
+  return c.json(saved, 201);
 });
 
-// Parse recipe from pasted text
+// Parse recipe from pasted text and save directly
 app.post("/paste", async (c) => {
+  const user = c.get("user")!;
   const body = await c.req.json();
   const parsed = pasteRecipeSchema.safeParse(body);
   if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
 
-  const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
+  const message = await createMessage({
     max_tokens: 4096,
     system: RECIPE_SYSTEM_PROMPT,
     tools: [recipeTool],
@@ -265,7 +394,13 @@ app.post("/paste", async (c) => {
   });
 
   logAi("paste", parsed.data.text.slice(0, 100), message);
-  return c.json(getToolInput(message));
+  const aiResult = getToolInput(message) as Record<string, unknown>;
+
+  const saved = await saveRecipeFromAi(aiResult, user.id, {
+    source: "manual",
+  });
+
+  return c.json(saved, 201);
 });
 
 // Generate meal plan with available ingredients
@@ -302,8 +437,7 @@ app.post("/meal-plan", async (c) => {
     recipeMetaMap.set(r.id, { totalTimeMinutes: totalTime, difficulty: r.difficulty ?? undefined });
   }
 
-  const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
+  const message = await createMessage({
     max_tokens: 4096,
     system: `Je bent een weekmenu-planner voor een VEGETARISCH huishouden. Maak een weekmenu met ALLEEN avondeten (geen lunch).
 BELANGRIJK: Er wordt uitsluitend vegetarisch gekookt. Kies NOOIT recepten met vlees of vis.

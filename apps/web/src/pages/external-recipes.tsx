@@ -74,19 +74,9 @@ export function ExternalRecipesPage() {
   async function handleImport(recipe: ExternalRecipe) {
     setImporting(recipe.id);
     try {
-      const result = await api<Record<string, unknown>>("/api/ai/import", {
+      const saved = await api<{ id: string }>("/api/ai/import", {
         method: "POST",
         body: { url: recipe.sourceUrl },
-      });
-
-      const saved = await api<{ id: string }>("/api/recipes", {
-        method: "POST",
-        body: {
-          ...result,
-          source: "url",
-          sourceUrl: recipe.sourceUrl,
-          imageUrl: recipe.imageUrl,
-        },
       });
 
       queryClient.invalidateQueries({ queryKey: ["recipes"] });

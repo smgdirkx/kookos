@@ -1,6 +1,15 @@
 import { type DifficultyLevel, difficultyLabels } from "@kookos/shared";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, BookOpen, Plus, Search, SlidersHorizontal, X } from "lucide-react";
+import {
+  AlertTriangle,
+  BookOpen,
+  ChefHat,
+  Clock,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -276,57 +285,66 @@ export function RecipesPage() {
           {filtered.map((recipe) => {
             const images = recipe.images ?? [];
             const displayImage = images.find((img) => img.caption !== "scan-original") ?? images[0];
+            const totalTime = (recipe.prepTimeMinutes ?? 0) + (recipe.cookTimeMinutes ?? 0);
             const meta: string[] = [];
-            if (recipe.prepTimeMinutes || recipe.cookTimeMinutes) {
-              const total = (recipe.prepTimeMinutes ?? 0) + (recipe.cookTimeMinutes ?? 0);
-              meta.push(`${total} min`);
-            }
+            if (totalTime > 0) meta.push(`${totalTime} min`);
             if (recipe.difficulty) meta.push(difficultyLabels[recipe.difficulty]);
 
             return (
               <Link key={recipe.id} to={`/recipe/${recipe.id}`}>
                 <Card interactive padding="none" className="overflow-hidden">
-                  <div className="sm:flex">
-                    {(() => {
-                      const notes = recipe.comments?.filter((c) => c.isImportant) ?? [];
-                      return (
-                        <div className="relative shrink-0">
-                          {displayImage ? (
-                            <img
-                              src={displayImage.url}
-                              alt=""
-                              className="w-full h-36 sm:w-40 sm:h-28 object-cover"
-                            />
-                          ) : (
-                            <RecipePlaceholder className="w-full h-36 sm:w-40 sm:h-28" />
+                  <div className="sm:flex sm:min-h-28">
+                    <div className="relative shrink-0 h-36 sm:h-auto sm:w-48 sm:self-stretch">
+                      {displayImage ? (
+                        <img
+                          src={displayImage.url}
+                          alt=""
+                          className="absolute inset-0 w-full h-full object-cover"
+                        />
+                      ) : (
+                        <RecipePlaceholder
+                          className="absolute inset-0 w-full h-full"
+                          variant="hero"
+                        />
+                      )}
+                      {meta.length > 0 && (
+                        <div className="absolute bottom-0 inset-x-0 flex items-center gap-3 px-3 py-1.5 bg-black/30 backdrop-blur-md text-white text-xs">
+                          {totalTime > 0 && (
+                            <span className="inline-flex items-center gap-1">
+                              <Clock size={12} />
+                              {totalTime} min
+                            </span>
                           )}
-                          {notes.length > 0 && (
-                            <div className="absolute bottom-2 left-2 right-2 flex flex-wrap gap-1">
-                              {notes.map((n) => (
-                                <span
-                                  key={n.id}
-                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-white bg-amber-500/90 backdrop-blur-sm rounded-full px-2 py-0.5 shadow-sm max-w-full"
-                                >
-                                  <AlertTriangle size={11} className="shrink-0" />
-                                  <span className="truncate">{n.content}</span>
-                                </span>
-                              ))}
-                            </div>
+                          {recipe.difficulty && (
+                            <span className="inline-flex items-center gap-1">
+                              <ChefHat size={12} />
+                              {difficultyLabels[recipe.difficulty]}
+                            </span>
                           )}
                         </div>
-                      );
-                    })()}
+                      )}
+                    </div>
                     <div className="px-4 py-3 flex-1 min-w-0">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <h2 className="font-semibold">{recipe.title}</h2>
-                        {meta.length > 0 && (
-                          <span className="text-xs text-gray-400 shrink-0">{meta.join(" · ")}</span>
-                        )}
-                      </div>
+                      <h2 className="font-semibold">{recipe.title}</h2>
                       {recipe.description && (
                         <p className="text-gray-400 text-sm mt-1 line-clamp-3">
                           {recipe.description}
                         </p>
+                      )}
+                      {(recipe.comments?.filter((c) => c.isImportant) ?? []).length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {recipe.comments
+                            ?.filter((c) => c.isImportant)
+                            .map((n) => (
+                              <span
+                                key={n.id}
+                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-100 rounded-full px-2 py-0.5 max-w-full"
+                              >
+                                <AlertTriangle size={11} className="shrink-0" />
+                                <span className="truncate">{n.content}</span>
+                              </span>
+                            ))}
+                        </div>
                       )}
                     </div>
                   </div>
