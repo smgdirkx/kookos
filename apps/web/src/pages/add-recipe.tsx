@@ -48,8 +48,14 @@ export function AddRecipePage() {
   const [compressing, setCompressing] = useState(false);
   const [backgroundTasks, setBackgroundTasks] = useState<BackgroundTask[]>([]);
 
+  // Paste state
+  const [pasteDishPhoto, setPasteDishPhoto] = useState<CompressedImage | null>(null);
+  const [pasteTags, setPasteTags] = useState<string[]>([]);
+  const [pasteCompressing, setPasteCompressing] = useState(false);
+
   const recipeInputRef = useRef<HTMLInputElement>(null);
   const dishInputRef = useRef<HTMLInputElement>(null);
+  const pasteDishInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [confirm, confirmModal] = useConfirm();
@@ -72,11 +78,14 @@ export function AddRecipePage() {
     return saved;
   }
 
-  async function confirmNoDishPhoto(): Promise<boolean> {
-    if (dishPhoto) return true;
+  async function confirmMissing(photo: CompressedImage | null, tags: string[]): Promise<boolean> {
+    const missing: string[] = [];
+    if (!photo) missing.push("foto van het gerecht");
+    if (tags.length === 0) missing.push("tags");
+    if (missing.length === 0) return true;
     return confirm({
-      title: "Geen foto van het gerecht",
-      description: "Weet je zeker dat je door wilt zonder foto van het gerecht?",
+      title: `Geen ${missing.join(" en ")}`,
+      description: `Weet je zeker dat je door wilt zonder ${missing.join(" en ")}?`,
       confirmLabel: "Doorgaan",
       variant: "primary",
     });
@@ -84,7 +93,7 @@ export function AddRecipePage() {
 
   async function handleGenerate() {
     if (!recipePhoto) return;
-    if (!(await confirmNoDishPhoto())) return;
+    if (!(await confirmMissing(dishPhoto, scanTags))) return;
     setLoading(true);
     setStatus("AI analyseert je foto...");
 
@@ -99,7 +108,7 @@ export function AddRecipePage() {
 
   async function handleGenerateAndNext() {
     if (!recipePhoto) return;
-    if (!(await confirmNoDishPhoto())) return;
+    if (!(await confirmMissing(dishPhoto, scanTags))) return;
     const taskId = ++taskIdCounter;
     const photo = recipePhoto;
     const dish = dishPhoto;
@@ -166,23 +175,71 @@ export function AddRecipePage() {
     }
   }
 
+  async function submitPaste(text: string, dish: CompressedImage | null, tags: string[]) {
+    const saved = await api<{ id: string }>("/api/ai/paste", {
+      method: "POST",
+      body: {
+        text,
+        ...(dish ? { dishImage: dish.base64, dishMediaType: dish.mediaType } : {}),
+        ...(tags.length ? { extraTags: tags } : {}),
+      },
+    });
+    queryClient.invalidateQueries({ queryKey: ["recipes"] });
+    return saved;
+  }
+
   async function handlePaste(e: React.FormEvent) {
     e.preventDefault();
     if (!pasteText.trim()) return;
+    if (!(await confirmMissing(pasteDishPhoto, pasteTags))) return;
     setLoading(true);
     setStatus("Tekst analyseren met AI...");
 
     try {
-      const saved = await api<{ id: string }>("/api/ai/paste", {
-        method: "POST",
-        body: { text: pasteText },
-      });
-
-      queryClient.invalidateQueries({ queryKey: ["recipes"] });
+      const saved = await submitPaste(pasteText, pasteDishPhoto, pasteTags);
       navigate(`/recipe/${saved.id}`, { replace: true });
     } catch (err: unknown) {
       setStatus(`Fout: ${err instanceof Error ? err.message : "Onbekende fout"}`);
       setLoading(false);
+    }
+  }
+
+  async function handlePasteAndNext(e: React.FormEvent) {
+    e.preventDefault();
+    if (!pasteText.trim()) return;
+    if (!(await confirmMissing(pasteDishPhoto, pasteTags))) return;
+    const taskId = ++taskIdCounter;
+    const text = pasteText;
+    const dish = pasteDishPhoto;
+    const tags = [...pasteTags];
+
+    setBackgroundTasks((prev) => [...prev, { id: taskId, status: "processing" }]);
+
+    // Reset text and dish photo for next paste (tags blijven staan)
+    setPasteText("");
+    setPasteDishPhoto(null);
+
+    submitPaste(text, dish, tags)
+      .then((saved) => updateTask(taskId, { status: "done", recipeId: saved.id }))
+      .catch((err: unknown) =>
+        updateTask(taskId, {
+          status: "error",
+          error: err instanceof Error ? err.message : "Onbekende fout",
+        }),
+      );
+  }
+
+  async function handlePasteDishPhoto(file: File) {
+    setPasteCompressing(true);
+    try {
+      const compressed = await compressImage(file);
+      setPasteDishPhoto(compressed);
+    } catch (err: unknown) {
+      setStatus(
+        `Fout bij verwerken foto: ${err instanceof Error ? err.message : "Onbekende fout"}`,
+      );
+    } finally {
+      setPasteCompressing(false);
     }
   }
 
@@ -213,6 +270,8 @@ export function AddRecipePage() {
     setStatus("");
     setRecipePhoto(null);
     setDishPhoto(null);
+    setPasteDishPhoto(null);
+    setPasteTags([]);
   }
 
   const processingCount = backgroundTasks.filter((t) => t.status === "processing").length;
@@ -499,25 +558,128 @@ export function AddRecipePage() {
       )}
 
       {!loading && step === "paste" && (
-        <section>
-          <form onSubmit={handlePaste} className="space-y-3">
-            <Textarea
-              placeholder="Plak hier de tekst van je recept..."
-              value={pasteText}
-              onChange={(e) => setPasteText(e.target.value)}
-              rows={10}
-            />
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              fullWidth
-              icon={Sparkles}
-              disabled={pasteText.trim().length < 10}
-            >
-              Verwerk recept
-            </Button>
-          </form>
+        <section className="space-y-4">
+          <input
+            ref={pasteDishInputRef}
+            type="file"
+            accept="image/*"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handlePasteDishPhoto(file);
+            }}
+            className="hidden"
+          />
+
+          {pasteCompressing && <Loading message="Foto verwerken..." />}
+
+          {!pasteCompressing && (
+            <>
+              <form onSubmit={handlePaste} className="space-y-4">
+                <Textarea
+                  placeholder="Plak hier de tekst van je recept..."
+                  value={pasteText}
+                  onChange={(e) => setPasteText(e.target.value)}
+                  rows={8}
+                />
+
+                {/* Dish photo */}
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-gray-500">
+                    Foto gerecht <span className="text-gray-400">(optioneel)</span>
+                  </p>
+                  {pasteDishPhoto ? (
+                    <div className="relative w-32">
+                      <img
+                        src={`data:${pasteDishPhoto.mediaType};base64,${pasteDishPhoto.base64}`}
+                        alt="Gerecht"
+                        className="w-32 h-32 object-cover rounded-xl border border-gray-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setPasteDishPhoto(null)}
+                        className="absolute top-1.5 right-1.5 p-1 bg-white/90 rounded-full shadow-sm"
+                      >
+                        <X className="w-3.5 h-3.5 text-gray-600" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => openFilePicker(pasteDishInputRef)}
+                      className="w-32 h-32 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-orange-300 hover:text-orange-400 transition-colors"
+                    >
+                      <ImagePlus className="w-6 h-6" />
+                      <span className="text-xs">Foto van gerecht</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Tags */}
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-gray-500">
+                    Tags <span className="text-gray-400">(optioneel)</span>
+                  </p>
+                  <TagInput value={pasteTags} onChange={setPasteTags} />
+                </div>
+
+                {/* Action buttons */}
+                {pasteText.trim().length >= 10 && (
+                  <>
+                    <hr className="border-gray-200" />
+                    <div className="flex gap-3">
+                      <Button type="submit" variant="outline" size="lg" icon={Sparkles} fullWidth>
+                        Importeer en bekijk
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="lg"
+                        icon={ChevronRight}
+                        fullWidth
+                        onClick={handlePasteAndNext}
+                      >
+                        Nog eentje
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </form>
+
+              {/* Background tasks */}
+              {backgroundTasks.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-gray-500">
+                    Verwerking{processingCount > 0 && ` (${processingCount} bezig)`}
+                  </p>
+                  {backgroundTasks.map((task) => (
+                    <div
+                      key={task.id}
+                      className="flex items-center gap-3 p-2.5 bg-white rounded-lg border border-gray-200"
+                    >
+                      {task.status === "processing" && (
+                        <Loader2 className="w-4 h-4 text-orange-500 animate-spin flex-shrink-0" />
+                      )}
+                      {task.status === "done" && (
+                        <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
+                      )}
+                      {task.status === "error" && (
+                        <X className="w-4 h-4 text-red-500 flex-shrink-0" />
+                      )}
+                      <span className="text-sm text-gray-700 flex-1">
+                        {task.status === "processing" && "AI analyseert..."}
+                        {task.status === "done" && "Recept opgeslagen"}
+                        {task.status === "error" && `Fout: ${task.error}`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {status && !pasteCompressing && (
+            <p className="text-sm text-red-500 text-center">{status}</p>
+          )}
         </section>
       )}
       {confirmModal}

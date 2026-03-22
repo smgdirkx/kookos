@@ -92,18 +92,18 @@ export function Layout() {
             <TabLink key={tab.to} {...tab} />
           ))}
 
-          {/* FAB — floating add button */}
+          {/* Center add button */}
           <NavLink
             to="/add-recipe"
             className={({ isActive }: { isActive: boolean }) =>
-              `absolute left-1/2 -translate-x-1/2 -top-4 w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all ${
+              `absolute left-1/2 -translate-x-1/2 -top-1 w-11 h-11 rounded-full flex items-center justify-center shadow-md transition-all ${
                 isActive
                   ? "bg-cta text-white scale-105"
                   : "bg-cta text-white hover:bg-cta-dark active:scale-95"
               }`
             }
           >
-            <Plus size={24} strokeWidth={2.5} />
+            <Plus size={22} strokeWidth={2.5} />
           </NavLink>
 
           {/* Spacer for the FAB */}

@@ -354,7 +354,7 @@ export function CommunityRecipesPage() {
   }
 
   return (
-    <div>
+    <div className={selected.size > 0 ? "pb-28" : ""}>
       <PageHeader
         title={showRecipes ? (selectedUser?.name ?? "Alle gebruikers") : "Community"}
         back={handleBack}
@@ -526,19 +526,31 @@ export function CommunityRecipesPage() {
 
           {/* Fixed bottom copy bar */}
           {selected.size > 0 && (
-            <div className="fixed bottom-20 left-0 right-0 px-4 pb-4 pt-2 bg-gradient-to-t from-gray-50 via-gray-50 to-gray-50/0">
-              <Button
-                variant="primary"
-                size="lg"
-                fullWidth
-                icon={copyMutation.isPending ? Loader2 : Copy}
-                disabled={copyMutation.isPending}
-                onClick={() => copyMutation.mutate([...selected])}
-              >
-                {copyMutation.isPending
-                  ? "Kopiëren..."
-                  : `Kopieer ${selected.size} recept${selected.size === 1 ? "" : "en"}`}
-              </Button>
+            <div className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] left-0 right-0 z-40">
+              <div className="mx-auto max-w-2xl px-4 py-3">
+                <div className="flex gap-3 bg-white rounded-2xl shadow-lg border border-gray-200 px-4 py-3">
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    className="flex-1"
+                    icon={copyMutation.isPending ? Loader2 : Copy}
+                    disabled={copyMutation.isPending}
+                    onClick={() => copyMutation.mutate([...selected])}
+                  >
+                    {copyMutation.isPending
+                      ? "Kopiëren..."
+                      : `Kopieer ${selected.size} recept${selected.size === 1 ? "" : "en"}`}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    icon={X}
+                    onClick={() => setSelected(new Set())}
+                  >
+                    Annuleren
+                  </Button>
+                </div>
+              </div>
             </div>
           )}
         </>

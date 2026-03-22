@@ -139,6 +139,9 @@ export const scanRecipeSchema = z.object({
 
 export const pasteRecipeSchema = z.object({
   text: z.string().min(10),
+  dishImage: z.string().optional(),
+  dishMediaType: z.string().optional(),
+  extraTags: z.array(z.string()).optional(),
 });
 
 export const maxTimeOptions = [0, 30, 45, 60] as const;

@@ -664,7 +664,7 @@ export function RecipePage() {
   if (recipe.difficulty) metaParts.push(difficultyLabels[recipe.difficulty]);
 
   return (
-    <div>
+    <div className={isEditing ? "pb-28" : ""}>
       {/* Hero image */}
       {visibleImages.length > 0 ? (
         <div className="relative -mx-4 -mt-6 mb-5">
@@ -1317,24 +1317,30 @@ export function RecipePage() {
           document.body,
         )}
 
-      {/* Edit save/cancel + delete */}
+      {/* Edit save/cancel — fixed bar above bottom nav */}
       {isEditing && editData ? (
-        <div className="flex gap-3 mt-6 mb-4">
-          <Button
-            variant="primary"
-            icon={Check}
-            onClick={() => updateRecipeMutation.mutate(editData)}
-            disabled={
-              !editData.title.trim() ||
-              !editData.instructions.trim() ||
-              updateRecipeMutation.isPending
-            }
-          >
-            {updateRecipeMutation.isPending ? "Opslaan..." : "Opslaan"}
-          </Button>
-          <Button variant="ghost" onClick={cancelEditing}>
-            Annuleren
-          </Button>
+        <div className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] left-0 right-0 z-40">
+          <div className="mx-auto max-w-2xl px-4 py-3">
+            <div className="flex gap-3 bg-white rounded-2xl shadow-lg border border-gray-200 px-4 py-3">
+              <Button
+                variant="primary"
+                size="lg"
+                icon={Check}
+                className="flex-1"
+                onClick={() => updateRecipeMutation.mutate(editData)}
+                disabled={
+                  !editData.title.trim() ||
+                  !editData.instructions.trim() ||
+                  updateRecipeMutation.isPending
+                }
+              >
+                {updateRecipeMutation.isPending ? "Opslaan..." : "Opslaan"}
+              </Button>
+              <Button variant="outline" size="lg" icon={X} onClick={cancelEditing}>
+                Annuleren
+              </Button>
+            </div>
+          </div>
         </div>
       ) : (
         <div className="pt-6">

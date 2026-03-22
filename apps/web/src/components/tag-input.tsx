@@ -41,7 +41,7 @@ export function TagInput({
 
   return (
     <div className="relative">
-      <div className="flex flex-wrap gap-1.5 items-center">
+      <div className="flex flex-wrap gap-1.5 items-center rounded-lg border border-gray-200 bg-white px-2 py-1.5 focus-within:border-orange-300 transition-colors">
         {value.map((tag) => (
           <span
             key={tag}
@@ -77,7 +77,7 @@ export function TagInput({
                 removeTag(value[value.length - 1]);
               }
             }}
-            placeholder={value.length ? "Tag toevoegen..." : "Voeg tags toe..."}
+            placeholder={value.length ? "Tag toevoegen..." : "Bijv. kookboek, vegetarisch..."}
             className="w-full text-sm py-1 px-2 bg-transparent outline-none placeholder:text-gray-400"
           />
           {open && (suggestions.length > 0 || input.trim()) && (

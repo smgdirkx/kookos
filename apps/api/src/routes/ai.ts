@@ -456,7 +456,9 @@ app.post("/paste", async (c) => {
 
   const saved = await saveRecipeFromAi(aiResult, user.id, {
     source: "manual",
-    extraTags: ["geplakt"],
+    dishImage: parsed.data.dishImage,
+    dishMediaType: parsed.data.dishMediaType,
+    extraTags: [...(parsed.data.extraTags ?? []), "geplakt"],
   });
 
   return c.json(saved, 201);
