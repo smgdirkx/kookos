@@ -503,9 +503,7 @@ export function CommunityRecipesPage() {
                         {recipe.description}
                       </p>
                     )}
-                    {allUsers && (
-                      <p className="text-xs text-gray-400 mt-1">van {recipe.userName}</p>
-                    )}
+                    <p className="text-xs text-gray-400 mt-1">van {recipe.userName}</p>
                   </div>
                   {recipe.imageUrl ? (
                     <img

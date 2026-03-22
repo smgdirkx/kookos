@@ -23,10 +23,8 @@ function withImageUrls<T extends { images?: { url: string }[] }>(recipe: T): T {
 
 app.use("*", requireAuth);
 
-// List users with recipe counts (excluding current user)
+// List users with recipe counts (all users including current)
 app.get("/users", async (c) => {
-  const currentUserId = c.get("user")!.id;
-
   // Only count original recipes (not copied/imported from external sources)
   const excludedSources = ["community", "url", "groentenabonnement"];
   const result = await db
@@ -43,7 +41,6 @@ app.get("/users", async (c) => {
         sql`, `,
       )}))`,
     )
-    .where(sql`${users.id} != ${currentUserId}`)
     .groupBy(users.id, users.name)
     .having(sql`count(${recipes.id}) > 0`)
     .orderBy(users.name);
@@ -53,7 +50,6 @@ app.get("/users", async (c) => {
 
 // List / search community recipes
 app.get("/recipes", async (c) => {
-  const currentUserId = c.get("user")!.id;
   const parsed = searchCommunityRecipesSchema.safeParse({
     userId: c.req.query("userId"),
     query: c.req.query("q"),
@@ -70,7 +66,7 @@ app.get("/recipes", async (c) => {
 
   // Exclude recipes that were copied/imported from external sources
   const excludedSources = ["community", "url", "groentenabonnement"];
-  let whereClause = sql`${recipes.userId} != ${currentUserId} AND (${recipes.source} IS NULL OR ${recipes.source} NOT IN (${sql.join(
+  let whereClause = sql`(${recipes.source} IS NULL OR ${recipes.source} NOT IN (${sql.join(
     excludedSources.map((s) => sql`${s}`),
     sql`, `,
   )}))`;
@@ -123,11 +119,10 @@ app.get("/recipes", async (c) => {
 
 // Get single community recipe (view-only detail)
 app.get("/recipes/:id", async (c) => {
-  const currentUserId = c.get("user")!.id;
   const id = c.req.param("id");
 
   const result = await db.query.recipes.findFirst({
-    where: sql`${recipes.id} = ${id} AND ${recipes.userId} != ${currentUserId}`,
+    where: sql`${recipes.id} = ${id}`,
     with: {
       ingredients: true,
       images: true,
