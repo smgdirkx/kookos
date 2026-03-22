@@ -25,8 +25,6 @@ app.use("*", requireAuth);
 
 // List users with recipe counts (all users including current)
 app.get("/users", async (c) => {
-  // Only count original recipes (not copied/imported from external sources)
-  const excludedSources = ["community", "url", "groentenabonnement"];
   const result = await db
     .select({
       id: users.id,
@@ -34,13 +32,7 @@ app.get("/users", async (c) => {
       recipeCount: sql<number>`count(${recipes.id})::int`,
     })
     .from(users)
-    .leftJoin(
-      recipes,
-      sql`${recipes.userId} = ${users.id} AND (${recipes.source} IS NULL OR ${recipes.source} NOT IN (${sql.join(
-        excludedSources.map((s) => sql`${s}`),
-        sql`, `,
-      )}))`,
-    )
+    .leftJoin(recipes, eq(recipes.userId, users.id))
     .groupBy(users.id, users.name)
     .having(sql`count(${recipes.id}) > 0`)
     .orderBy(users.name);
@@ -64,15 +56,7 @@ app.get("/recipes", async (c) => {
 
   const imageBase = S3_PUBLIC_URL || "/images/kookos";
 
-  // Exclude recipes that were copied/imported from external sources
-  const excludedSources = ["community", "url", "groentenabonnement"];
-  let whereClause = sql`(${recipes.source} IS NULL OR ${recipes.source} NOT IN (${sql.join(
-    excludedSources.map((s) => sql`${s}`),
-    sql`, `,
-  )}))`;
-  if (userId) {
-    whereClause = sql`${whereClause} AND ${recipes.userId} = ${userId}`;
-  }
+  let whereClause = userId ? sql`${recipes.userId} = ${userId}` : sql`TRUE`;
 
   if (trimmedQuery) {
     const likePattern = `%${trimmedQuery}%`;
