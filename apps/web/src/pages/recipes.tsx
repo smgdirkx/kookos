@@ -63,17 +63,67 @@ function useDebounce<T>(value: T, delay: number): T {
   return debounced;
 }
 
+const FILTER_STORAGE_KEY = "recipes-filters";
+
+type StoredFilters = {
+  q?: string;
+  cuisine?: string[];
+  category?: string[];
+  difficulty?: string[];
+  tag?: string[];
+  maxTime?: number;
+  filtersOpen?: boolean;
+};
+
+function loadFilters(): StoredFilters {
+  try {
+    const raw = localStorage.getItem(FILTER_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
 export function RecipesPage() {
-  const [query, setQuery] = useState("");
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [maxTime, setMaxTime] = useState<number | null>(null);
-  const [selectedCuisines, setSelectedCuisines] = useState<Set<string>>(new Set());
-  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
-  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
-  const [selectedDifficulty, setSelectedDifficulty] = useState<Set<string>>(new Set());
+  const stored = useRef(loadFilters()).current;
+
+  const [query, setQuery] = useState(stored.q ?? "");
+  const [filtersOpen, setFiltersOpen] = useState(stored.filtersOpen ?? false);
+  const [maxTime, setMaxTime] = useState<number | null>(stored.maxTime ?? null);
+  const [selectedCuisines, setSelectedCuisines] = useState<Set<string>>(
+    () => new Set(stored.cuisine ?? []),
+  );
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(
+    () => new Set(stored.category ?? []),
+  );
+  const [selectedTags, setSelectedTags] = useState<Set<string>>(() => new Set(stored.tag ?? []));
+  const [selectedDifficulty, setSelectedDifficulty] = useState<Set<string>>(
+    () => new Set(stored.difficulty ?? []),
+  );
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   const debouncedQuery = useDebounce(query, 300);
+
+  // Persist filter state to localStorage
+  useEffect(() => {
+    const filters: StoredFilters = {};
+    if (debouncedQuery.trim()) filters.q = debouncedQuery.trim();
+    if (selectedCuisines.size > 0) filters.cuisine = [...selectedCuisines];
+    if (selectedCategories.size > 0) filters.category = [...selectedCategories];
+    if (selectedDifficulty.size > 0) filters.difficulty = [...selectedDifficulty];
+    if (selectedTags.size > 0) filters.tag = [...selectedTags];
+    if (maxTime !== null) filters.maxTime = maxTime;
+    if (filtersOpen) filters.filtersOpen = true;
+    localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(filters));
+  }, [
+    debouncedQuery,
+    selectedCuisines,
+    selectedCategories,
+    selectedDifficulty,
+    selectedTags,
+    maxTime,
+    filtersOpen,
+  ]);
 
   function toggleSet(set: Set<string>, value: string): Set<string> {
     const next = new Set(set);
@@ -163,12 +213,16 @@ export function RecipesPage() {
 
   const hasAnyRecipes = totalCount > 0;
 
+  const totalFilterCount = activeFilterCount + (debouncedQuery.trim() ? 1 : 0);
+
   function clearFilters() {
+    setQuery("");
     setMaxTime(null);
     setSelectedCuisines(new Set());
     setSelectedCategories(new Set());
     setSelectedTags(new Set());
     setSelectedDifficulty(new Set());
+    setFiltersOpen(false);
   }
 
   // Only show full-page spinner on very first load (no cached data at all)
@@ -186,23 +240,36 @@ export function RecipesPage() {
       />
 
       {hasAnyRecipes && (
-        <div className="flex gap-2 mb-4">
-          <Input
-            type="search"
-            placeholder="Zoek in recepten..."
-            icon={Search}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          <IconButton
-            icon={filtersOpen ? X : SlidersHorizontal}
-            variant={filtersOpen || activeFilterCount > 0 ? "primary" : "outline"}
-            size="lg"
-            badge={activeFilterCount || undefined}
-            label="Filters"
-            onClick={() => setFiltersOpen(!filtersOpen)}
-          />
-        </div>
+        <>
+          <div className="flex gap-2 mb-2">
+            <Input
+              type="search"
+              placeholder="Zoek in recepten..."
+              icon={Search}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <IconButton
+              icon={filtersOpen ? X : SlidersHorizontal}
+              variant={filtersOpen || activeFilterCount > 0 ? "primary" : "outline"}
+              size="lg"
+              badge={activeFilterCount || undefined}
+              label="Filters"
+              onClick={() => setFiltersOpen(!filtersOpen)}
+            />
+          </div>
+          {totalFilterCount > 0 && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="flex items-center gap-1.5 text-sm text-primary font-medium mb-4 hover:underline"
+            >
+              <X size={14} />
+              Wis alle filters
+            </button>
+          )}
+          {totalFilterCount === 0 && <div className="mb-2" />}
+        </>
       )}
 
       {filtersOpen && filterOptions && (

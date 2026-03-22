@@ -18,6 +18,7 @@ import mealPlanRoutes from "./routes/meal-plans.js";
 import recipeRoutes from "./routes/recipes.js";
 import shoppingListRoutes from "./routes/shopping-lists.js";
 import tagRoutes from "./routes/tags.js";
+import userRoutes from "./routes/users.js";
 import { ensureBucket } from "./s3.js";
 import { syncExternalRecipes } from "./services/scraper.js";
 import type { AppEnv } from "./types.js";
@@ -54,6 +55,7 @@ app.route("/api/images", imageRoutes);
 app.route("/api/tags", tagRoutes);
 app.route("/api/external-recipes", externalRecipeRoutes);
 app.route("/api/community", communityRoutes);
+app.route("/api/users", userRoutes);
 
 // Health check
 app.get("/health", (c) => c.json({ status: "ok" }));

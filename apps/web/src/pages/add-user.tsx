@@ -1,32 +1,31 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { Button, Input, PageHeader } from "@/components/ui";
+import { api } from "@/lib/api";
 
 export function AddUserPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setSuccess("");
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/sign-up/email", {
+      const data = await api<{ name: string; email: string }>("/api/users", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ name, email, password }),
+        body: { name, email, password },
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message ?? data.error ?? "Aanmaken mislukt");
-
-      navigate("/add-recipe", { replace: true });
+      setSuccess(`Gebruiker "${data.name}" is aangemaakt`);
+      setName("");
+      setEmail("");
+      setPassword("");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Onbekende fout");
     }
@@ -53,14 +52,16 @@ export function AddUserPage() {
           required
         />
         <Input
-          type="password"
+          type="text"
           placeholder="Wachtwoord"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
+          minLength={6}
         />
 
         {error && <p className="text-danger text-sm text-center">{error}</p>}
+        {success && <p className="text-green-600 text-sm text-center">{success}</p>}
 
         <Button type="submit" variant="cta" size="lg" fullWidth disabled={loading}>
           {loading ? "Aanmaken..." : "Gebruiker aanmaken"}
