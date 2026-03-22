@@ -425,6 +425,9 @@ export function RecipePage() {
     mutationFn: () => api(`/api/recipes/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["recipes"] });
+      queryClient.invalidateQueries({ queryKey: ["recipe-filters"] });
+      queryClient.invalidateQueries({ queryKey: ["recipes-count"] });
+      queryClient.invalidateQueries({ queryKey: ["recipes-all"] });
       navigate("/", { replace: true });
     },
   });
@@ -512,6 +515,9 @@ export function RecipePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["recipe", id] });
       queryClient.invalidateQueries({ queryKey: ["recipes"] });
+      queryClient.invalidateQueries({ queryKey: ["recipe-filters"] });
+      queryClient.invalidateQueries({ queryKey: ["recipes-count"] });
+      queryClient.invalidateQueries({ queryKey: ["recipes-all"] });
       setIsEditing(false);
       setEditData(null);
     },

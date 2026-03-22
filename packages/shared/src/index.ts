@@ -62,7 +62,7 @@ export const createRecipeSchema = z.object({
   cuisine: z.string().optional(),
   category: z.string().optional(),
   difficulty: z.enum(difficultyLevels).optional(),
-  source: z.enum(["scan", "url", "manual", "community"]).optional(),
+  source: z.enum(["scan", "url", "manual", "community", "groentenabonnement"]).optional(),
   sourceUrl: z.string().url().optional(),
   notes: z.string().optional(),
   ingredients: z.array(recipeIngredientSchema).optional(),

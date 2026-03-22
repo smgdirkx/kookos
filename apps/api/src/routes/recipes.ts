@@ -1,6 +1,6 @@
 import { DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { createRecipeSchema, updateRecipeSchema } from "@kookos/shared";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, lt, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../db/index.js";
 import { recipeImages, recipeIngredients, recipes, recipeTags, tags } from "../db/schema.js";
@@ -32,37 +32,190 @@ function withImageUrls<T extends { images?: { url: string }[] }>(recipe: T): T {
   return recipe;
 }
 
-// List all recipes for current user
+const PAGE_SIZE = 20;
+
+// List recipes with cursor-based pagination and server-side filters
 app.get("/", async (c) => {
   const user = c.get("user")!;
-  const result = await db.query.recipes.findMany({
-    where: eq(recipes.userId, user.id),
+  const cursor = c.req.query("cursor"); // format: "timestamp_id"
+  const q = c.req.query("q");
+  const cuisine = c.req.query("cuisine");
+  const category = c.req.query("category");
+  const difficulty = c.req.query("difficulty");
+  const tag = c.req.query("tag");
+  const maxTime = c.req.query("maxTime");
+  const limit = Math.min(Number(c.req.query("limit")) || PAGE_SIZE, 50);
+
+  const conditions = [eq(recipes.userId, user.id)];
+
+  // Full-text search: tsvector with prefix matching for partial words,
+  // fallback to ILIKE on title when tsvector misses
+  if (q?.trim()) {
+    // Strip tsquery special characters to prevent syntax errors
+    const sanitized = q.trim().replace(/[&|!:*()\\<>']/g, " ");
+    const words = sanitized.split(/\s+/).filter(Boolean);
+    if (words.length > 0) {
+      // Last word gets prefix matching (:*) for type-ahead behavior
+      const tsTerms = words.map((w, i) => (i === words.length - 1 ? `${w}:*` : w)).join(" & ");
+      conditions.push(
+        sql`(
+          ${recipes.searchVector} @@ to_tsquery('dutch', ${tsTerms})
+          OR ${recipes.title} ILIKE ${"%" + q.trim() + "%"}
+        )`,
+      );
+    }
+  }
+
+  if (cuisine) {
+    const values = cuisine.split(",").filter(Boolean);
+    if (values.length === 1) {
+      conditions.push(eq(recipes.cuisine, values[0]));
+    } else {
+      conditions.push(
+        sql`${recipes.cuisine} IN (${sql.join(
+          values.map((v) => sql`${v}`),
+          sql`, `,
+        )})`,
+      );
+    }
+  }
+  if (category) {
+    const values = category.split(",").filter(Boolean);
+    if (values.length === 1) {
+      conditions.push(eq(recipes.category, values[0]));
+    } else {
+      conditions.push(
+        sql`${recipes.category} IN (${sql.join(
+          values.map((v) => sql`${v}`),
+          sql`, `,
+        )})`,
+      );
+    }
+  }
+  if (difficulty) {
+    const values = difficulty.split(",").filter(Boolean);
+    if (values.length === 1) {
+      conditions.push(eq(recipes.difficulty, values[0]));
+    } else {
+      conditions.push(
+        sql`${recipes.difficulty} IN (${sql.join(
+          values.map((v) => sql`${v}`),
+          sql`, `,
+        )})`,
+      );
+    }
+  }
+  if (maxTime) {
+    const max = Number(maxTime);
+    if (max > 0) {
+      conditions.push(
+        sql`(COALESCE(${recipes.prepTimeMinutes}, 0) + COALESCE(${recipes.cookTimeMinutes}, 0)) > 0`,
+      );
+      conditions.push(
+        sql`(COALESCE(${recipes.prepTimeMinutes}, 0) + COALESCE(${recipes.cookTimeMinutes}, 0)) <= ${max}`,
+      );
+    }
+  }
+
+  // Tag filter: recipe must have at least one of the selected tags
+  if (tag) {
+    const values = tag.split(",").filter(Boolean);
+    conditions.push(
+      sql`EXISTS (
+        SELECT 1 FROM recipe_tags rt
+        JOIN tags t ON t.id = rt.tag_id
+        WHERE rt.recipe_id = ${recipes.id} AND t.name IN (${sql.join(
+          values.map((v) => sql`${v}`),
+          sql`, `,
+        )})
+      )`,
+    );
+  }
+
+  // Cursor pagination: "createdAt|id" — fetch rows older than cursor
+  if (cursor) {
+    const sep = cursor.indexOf("|");
+    const cursorTs = sep > 0 ? cursor.slice(0, sep) : null;
+    const cursorId = sep > 0 ? cursor.slice(sep + 1) : null;
+    if (cursorTs && cursorId) {
+      const cursorDate = new Date(cursorTs);
+      conditions.push(
+        or(
+          lt(recipes.createdAt, cursorDate),
+          and(eq(recipes.createdAt, cursorDate), sql`${recipes.id} < ${cursorId}`),
+        )!,
+      );
+    }
+  }
+
+  // Total count of all user's recipes (unfiltered) — only on first page
+  const totalCountPromise = !cursor
+    ? db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(recipes)
+        .where(eq(recipes.userId, user.id))
+        .then((rows) => Number(rows[0].count))
+    : null;
+
+  const resultPromise = db.query.recipes.findMany({
+    where: and(...conditions),
     with: {
-      ingredients: true,
       images: true,
       recipeTags: { with: { tag: true } },
       comments: true,
     },
-    orderBy: (recipes, { desc }) => [desc(recipes.createdAt)],
+    orderBy: (recipes, { desc }) => [desc(recipes.createdAt), desc(recipes.id)],
+    limit: limit + 1,
   });
-  return c.json(result.map(withImageUrls));
+
+  const [result, totalCount] = await Promise.all([resultPromise, totalCountPromise]);
+
+  const hasMore = result.length > limit;
+  const page = hasMore ? result.slice(0, limit) : result;
+  const nextCursor = hasMore
+    ? `${page[page.length - 1].createdAt.toISOString()}|${page[page.length - 1].id}`
+    : null;
+
+  return c.json({
+    recipes: page.map(withImageUrls),
+    nextCursor,
+    ...(totalCount !== null ? { totalCount } : {}),
+  });
 });
 
-// Search recipes using tsvector
-app.get("/search", async (c) => {
+// Filter options for the current user's recipes
+app.get("/filters", async (c) => {
   const user = c.get("user")!;
-  const query = c.req.query("q");
-  if (!query) return c.json({ error: "Query parameter 'q' is required" }, 400);
 
-  const result = await db
-    .select()
-    .from(recipes)
-    .where(
-      sql`${recipes.userId} = ${user.id} AND ${recipes.searchVector} @@ plainto_tsquery('dutch', ${query})`,
-    )
-    .orderBy(sql`ts_rank(${recipes.searchVector}, plainto_tsquery('dutch', ${query})) DESC`);
+  const [cuisineRows, categoryRows, tagRows, timeRows] = await Promise.all([
+    db
+      .selectDistinct({ cuisine: recipes.cuisine })
+      .from(recipes)
+      .where(and(eq(recipes.userId, user.id), sql`${recipes.cuisine} IS NOT NULL`)),
+    db
+      .selectDistinct({ category: recipes.category })
+      .from(recipes)
+      .where(and(eq(recipes.userId, user.id), sql`${recipes.category} IS NOT NULL`)),
+    db
+      .selectDistinct({ name: tags.name })
+      .from(tags)
+      .innerJoin(recipeTags, eq(recipeTags.tagId, tags.id))
+      .innerJoin(recipes, eq(recipes.id, recipeTags.recipeId))
+      .where(eq(recipes.userId, user.id)),
+    db
+      .select({
+        maxTime: sql<number>`MAX(COALESCE(${recipes.prepTimeMinutes}, 0) + COALESCE(${recipes.cookTimeMinutes}, 0))`,
+      })
+      .from(recipes)
+      .where(eq(recipes.userId, user.id)),
+  ]);
 
-  return c.json(result);
+  return c.json({
+    cuisines: cuisineRows.map((r) => r.cuisine!).sort(),
+    categories: categoryRows.map((r) => r.category!).sort(),
+    tags: tagRows.map((r) => r.name).sort(),
+    maxCookTime: timeRows[0]?.maxTime ?? 120,
+  });
 });
 
 // Get single recipe

@@ -211,7 +211,7 @@ async function saveRecipeFromAi(
   aiResult: Record<string, unknown>,
   userId: string,
   opts: {
-    source: "scan" | "url" | "manual";
+    source: "scan" | "url" | "manual" | "groentenabonnement";
     sourceUrl?: string;
     scanImage?: string;
     scanMediaType?: string;
@@ -420,9 +420,10 @@ app.post("/import", async (c) => {
 
   // Auto-tag with base domain (e.g. "ah.nl", "groentenabonnement.nl")
   const hostname = new URL(parsed.data.url).hostname.replace(/^www\./, "");
+  const isGroentenabo = hostname.includes("groentenabonnement");
 
   const saved = await saveRecipeFromAi(aiResult, user.id, {
-    source: "url",
+    source: isGroentenabo ? "groentenabonnement" : "url",
     sourceUrl: parsed.data.url,
     imageUrl: ogImage,
     extraTags: [hostname],

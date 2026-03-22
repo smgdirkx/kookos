@@ -80,6 +80,9 @@ export function ExternalRecipesPage() {
       });
 
       queryClient.invalidateQueries({ queryKey: ["recipes"] });
+      queryClient.invalidateQueries({ queryKey: ["recipe-filters"] });
+      queryClient.invalidateQueries({ queryKey: ["recipes-count"] });
+      queryClient.invalidateQueries({ queryKey: ["recipes-all"] });
       navigate(`/recipe/${saved.id}`, { replace: true });
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Import mislukt");

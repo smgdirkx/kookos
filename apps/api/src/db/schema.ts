@@ -94,8 +94,9 @@ export const recipes = pgTable(
     cuisine: varchar("cuisine", { length: 100 }),
     category: varchar("category", { length: 100 }),
     difficulty: varchar("difficulty", { length: 20 }), // "makkelijk", "gemiddeld", "moeilijk"
-    source: varchar("source", { length: 20 }), // "scan", "url", "manual"
+    source: varchar("source", { length: 20 }), // "scan", "url", "manual", "community", "groentenabonnement"
     sourceUrl: text("source_url"),
+    sourceRecipeId: uuid("source_recipe_id"),
     notes: text("notes"),
 
     isFavorite: boolean("is_favorite").notNull().default(true),

@@ -27,6 +27,8 @@ app.use("*", requireAuth);
 app.get("/users", async (c) => {
   const currentUserId = c.get("user")!.id;
 
+  // Only count original recipes (not copied/imported from external sources)
+  const excludedSources = ["community", "url", "groentenabonnement"];
   const result = await db
     .select({
       id: users.id,
@@ -34,7 +36,13 @@ app.get("/users", async (c) => {
       recipeCount: sql<number>`count(${recipes.id})::int`,
     })
     .from(users)
-    .leftJoin(recipes, eq(recipes.userId, users.id))
+    .leftJoin(
+      recipes,
+      sql`${recipes.userId} = ${users.id} AND (${recipes.source} IS NULL OR ${recipes.source} NOT IN (${sql.join(
+        excludedSources.map((s) => sql`${s}`),
+        sql`, `,
+      )}))`,
+    )
     .where(sql`${users.id} != ${currentUserId}`)
     .groupBy(users.id, users.name)
     .having(sql`count(${recipes.id}) > 0`)
@@ -60,7 +68,12 @@ app.get("/recipes", async (c) => {
 
   const imageBase = S3_PUBLIC_URL || "/images/kookos";
 
-  let whereClause = sql`${recipes.userId} != ${currentUserId}`;
+  // Exclude recipes that were copied/imported from external sources
+  const excludedSources = ["community", "url", "groentenabonnement"];
+  let whereClause = sql`${recipes.userId} != ${currentUserId} AND (${recipes.source} IS NULL OR ${recipes.source} NOT IN (${sql.join(
+    excludedSources.map((s) => sql`${s}`),
+    sql`, `,
+  )}))`;
   if (userId) {
     whereClause = sql`${whereClause} AND ${recipes.userId} = ${userId}`;
   }
@@ -172,6 +185,7 @@ app.post("/copy", async (c) => {
         category: source.category,
         difficulty: source.difficulty,
         source: "community",
+        sourceRecipeId: source.id,
         notes: sourceUser ? `Gekopieerd van ${sourceUser.name}` : undefined,
         isFavorite: true,
       })

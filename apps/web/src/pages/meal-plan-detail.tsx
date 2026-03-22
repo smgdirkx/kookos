@@ -158,8 +158,11 @@ export function MealPlanDetailPage() {
   });
 
   const { data: recipes = [] } = useQuery<Recipe[]>({
-    queryKey: ["recipes"],
-    queryFn: () => api("/api/recipes"),
+    queryKey: ["recipes-all"],
+    queryFn: async () => {
+      const res = await api<{ recipes: Recipe[] }>("/api/recipes?limit=50");
+      return res.recipes;
+    },
     enabled: showAddRecipe,
   });
 

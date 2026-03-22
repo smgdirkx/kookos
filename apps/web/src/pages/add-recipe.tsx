@@ -75,6 +75,9 @@ export function AddRecipePage() {
       },
     });
     queryClient.invalidateQueries({ queryKey: ["recipes"] });
+    queryClient.invalidateQueries({ queryKey: ["recipe-filters"] });
+    queryClient.invalidateQueries({ queryKey: ["recipes-count"] });
+    queryClient.invalidateQueries({ queryKey: ["recipes-all"] });
     return saved;
   }
 
@@ -168,6 +171,9 @@ export function AddRecipePage() {
       });
 
       queryClient.invalidateQueries({ queryKey: ["recipes"] });
+      queryClient.invalidateQueries({ queryKey: ["recipe-filters"] });
+      queryClient.invalidateQueries({ queryKey: ["recipes-count"] });
+      queryClient.invalidateQueries({ queryKey: ["recipes-all"] });
       navigate(`/recipe/${saved.id}`, { replace: true });
     } catch (err: unknown) {
       setStatus(`Fout: ${err instanceof Error ? err.message : "Onbekende fout"}`);
@@ -185,6 +191,9 @@ export function AddRecipePage() {
       },
     });
     queryClient.invalidateQueries({ queryKey: ["recipes"] });
+    queryClient.invalidateQueries({ queryKey: ["recipe-filters"] });
+    queryClient.invalidateQueries({ queryKey: ["recipes-count"] });
+    queryClient.invalidateQueries({ queryKey: ["recipes-all"] });
     return saved;
   }
 
@@ -256,6 +265,9 @@ export function AddRecipePage() {
         },
       });
       queryClient.invalidateQueries({ queryKey: ["recipes"] });
+      queryClient.invalidateQueries({ queryKey: ["recipe-filters"] });
+      queryClient.invalidateQueries({ queryKey: ["recipes-count"] });
+      queryClient.invalidateQueries({ queryKey: ["recipes-all"] });
       navigate(`/recipe/${saved.id}`, { replace: true, state: { edit: true } });
     } catch (err: unknown) {
       setStatus(`Fout: ${err instanceof Error ? err.message : "Onbekende fout"}`);

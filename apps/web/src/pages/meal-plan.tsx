@@ -125,13 +125,15 @@ export function MealPlanPage() {
   const draft = loadDraft();
   const savedForm = loadFormState();
 
-  const { data: recipeCount, isLoading: countLoading } = useQuery<{ id: string }[]>({
-    queryKey: ["recipes"],
-    queryFn: () => api("/api/recipes"),
-    select: (data) => data,
+  const { data: recipeCount, isLoading: countLoading } = useQuery<number>({
+    queryKey: ["recipes-count"],
+    queryFn: async () => {
+      const res = await api<{ recipes: { id: string }[] }>("/api/recipes?limit=50");
+      return res.recipes.length;
+    },
   });
 
-  const hasEnoughRecipes = (recipeCount?.length ?? 0) >= MIN_RECIPES;
+  const hasEnoughRecipes = (recipeCount ?? 0) >= MIN_RECIPES;
 
   // Form state: draft (post-generate) takes priority, then saved form state, then defaults
   const [ingredients, setIngredients] = useState(
@@ -298,7 +300,7 @@ export function MealPlanPage() {
             <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
             <div className="text-sm text-amber-800">
               <p>
-                Je hebt pas {recipeCount?.length ?? 0} recepten. Het resultaat zal beperkt zijn.{" "}
+                Je hebt pas {recipeCount ?? 0} recepten. Het resultaat zal beperkt zijn.{" "}
                 <Link to="/add-recipe" className="underline font-medium hover:text-amber-900">
                   Voeg meer recepten toe
                 </Link>

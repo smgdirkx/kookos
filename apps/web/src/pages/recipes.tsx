@@ -1,16 +1,17 @@
 import { type DifficultyLevel, difficultyLabels } from "@kookos/shared";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
   BookOpen,
   ChefHat,
   Clock,
+  Loader2,
   Plus,
   Search,
   SlidersHorizontal,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Card,
@@ -35,12 +36,32 @@ type Recipe = {
   difficulty?: DifficultyLevel;
   prepTimeMinutes?: number;
   cookTimeMinutes?: number;
-  ingredients?: { name: string }[];
-
   comments?: { id: string; content: string; isImportant: boolean }[];
   images?: { url: string; isPrimary: boolean; caption?: string }[];
   recipeTags?: { tag: { name: string } }[];
 };
+
+type RecipesPage = {
+  recipes: Recipe[];
+  nextCursor: string | null;
+  totalCount?: number;
+};
+
+type FilterOptions = {
+  cuisines: string[];
+  categories: string[];
+  tags: string[];
+  maxCookTime: number;
+};
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
 
 export function RecipesPage() {
   const [query, setQuery] = useState("");
@@ -50,30 +71,88 @@ export function RecipesPage() {
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [selectedDifficulty, setSelectedDifficulty] = useState<Set<string>>(new Set());
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const { data: recipes, isLoading } = useQuery<Recipe[]>({
-    queryKey: ["recipes"],
-    queryFn: () => api("/api/recipes"),
+  const debouncedQuery = useDebounce(query, 300);
+
+  function toggleSet(set: Set<string>, value: string): Set<string> {
+    const next = new Set(set);
+    if (next.has(value)) next.delete(value);
+    else next.add(value);
+    return next;
+  }
+
+  // Build search params for the API
+  const buildParams = useCallback(
+    (cursor?: string) => {
+      const params = new URLSearchParams();
+      if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim());
+      if (selectedCuisines.size > 0) params.set("cuisine", [...selectedCuisines].join(","));
+      if (selectedCategories.size > 0) params.set("category", [...selectedCategories].join(","));
+      if (selectedDifficulty.size > 0) params.set("difficulty", [...selectedDifficulty].join(","));
+      if (selectedTags.size > 0) params.set("tag", [...selectedTags].join(","));
+      if (maxTime !== null) params.set("maxTime", String(maxTime));
+      if (cursor) params.set("cursor", cursor);
+      return params.toString();
+    },
+    [
+      debouncedQuery,
+      selectedCuisines,
+      selectedCategories,
+      selectedDifficulty,
+      selectedTags,
+      maxTime,
+    ],
+  );
+
+  // Fetch filter options
+  const { data: filterOptions } = useQuery<FilterOptions>({
+    queryKey: ["recipe-filters"],
+    queryFn: () => api("/api/recipes/filters"),
   });
 
-  const filterOptions = useMemo(() => {
-    if (!recipes) return { cuisines: [], categories: [], tags: [], maxCookTime: 120 };
-    const cuisines = [...new Set(recipes.map((r) => r.cuisine).filter(Boolean))] as string[];
-    const categories = [...new Set(recipes.map((r) => r.category).filter(Boolean))] as string[];
-    const tags = [
-      ...new Set(recipes.flatMap((r) => r.recipeTags?.map((rt) => rt.tag.name) ?? [])),
-    ] as string[];
-    const times = recipes
-      .map((r) => (r.prepTimeMinutes ?? 0) + (r.cookTimeMinutes ?? 0))
-      .filter((t) => t > 0);
-    const maxCookTime = times.length ? Math.max(...times) : 120;
-    return {
-      cuisines: cuisines.sort(),
-      categories: categories.sort(),
-      tags: tags.sort(),
-      maxCookTime,
-    };
-  }, [recipes]);
+  // Infinite query for recipes
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useInfiniteQuery<RecipesPage>({
+      queryKey: [
+        "recipes",
+        debouncedQuery,
+        [...selectedCuisines].sort().join(),
+        [...selectedCategories].sort().join(),
+        [...selectedDifficulty].sort().join(),
+        [...selectedTags].sort().join(),
+        maxTime,
+      ],
+      queryFn: ({ pageParam }) => {
+        const params = buildParams(pageParam as string | undefined);
+        return api(`/api/recipes${params ? `?${params}` : ""}`);
+      },
+      getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+      initialPageParam: undefined as string | undefined,
+      placeholderData: keepPreviousData,
+    });
+
+  // Infinite scroll observer
+  const handleIntersect = useCallback(
+    (entries: IntersectionObserverEntry[]) => {
+      if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+        fetchNextPage();
+      }
+    },
+    [hasNextPage, isFetchingNextPage, fetchNextPage],
+  );
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(handleIntersect, { rootMargin: "200px" });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [handleIntersect]);
+
+  const allRecipes = data?.pages.flatMap((p) => p.recipes) ?? [];
+  // totalCount comes from the first page (unfiltered count of all user's recipes)
+  const totalCount = data?.pages[0]?.totalCount ?? 0;
 
   const activeFilterCount =
     (maxTime !== null ? 1 : 0) +
@@ -82,51 +161,7 @@ export function RecipesPage() {
     selectedTags.size +
     selectedDifficulty.size;
 
-  const filtered = useMemo(() => {
-    return recipes?.filter((r) => {
-      if (query.trim()) {
-        const q = query.toLowerCase();
-        const matches =
-          r.title.toLowerCase().includes(q) ||
-          r.description?.toLowerCase().includes(q) ||
-          r.cuisine?.toLowerCase().includes(q) ||
-          r.category?.toLowerCase().includes(q) ||
-          r.ingredients?.some((ing) => ing.name.toLowerCase().includes(q));
-        if (!matches) return false;
-      }
-      if (maxTime !== null) {
-        const total = (r.prepTimeMinutes ?? 0) + (r.cookTimeMinutes ?? 0);
-        if (total === 0 || total > maxTime) return false;
-      }
-      if (selectedCuisines.size > 0 && (!r.cuisine || !selectedCuisines.has(r.cuisine)))
-        return false;
-      if (selectedCategories.size > 0 && (!r.category || !selectedCategories.has(r.category)))
-        return false;
-      if (selectedTags.size > 0) {
-        const recipeTags = new Set(r.recipeTags?.map((rt) => rt.tag.name) ?? []);
-        const hasMatch = [...selectedTags].some((t) => recipeTags.has(t));
-        if (!hasMatch) return false;
-      }
-      if (selectedDifficulty.size > 0 && (!r.difficulty || !selectedDifficulty.has(r.difficulty)))
-        return false;
-      return true;
-    });
-  }, [
-    recipes,
-    query,
-    maxTime,
-    selectedCuisines,
-    selectedCategories,
-    selectedTags,
-    selectedDifficulty,
-  ]);
-
-  function toggleSet(set: Set<string>, value: string): Set<string> {
-    const next = new Set(set);
-    if (next.has(value)) next.delete(value);
-    else next.add(value);
-    return next;
-  }
+  const hasAnyRecipes = totalCount > 0;
 
   function clearFilters() {
     setMaxTime(null);
@@ -136,7 +171,8 @@ export function RecipesPage() {
     setSelectedDifficulty(new Set());
   }
 
-  if (isLoading) return <Loading />;
+  // Only show full-page spinner on very first load (no cached data at all)
+  if (!data && !filterOptions && isLoading) return <Loading />;
 
   return (
     <div>
@@ -149,7 +185,7 @@ export function RecipesPage() {
         }
       />
 
-      {recipes?.length ? (
+      {hasAnyRecipes && (
         <div className="flex gap-2 mb-4">
           <Input
             type="search"
@@ -167,9 +203,9 @@ export function RecipesPage() {
             onClick={() => setFiltersOpen(!filtersOpen)}
           />
         </div>
-      ) : null}
+      )}
 
-      {filtersOpen && (
+      {filtersOpen && filterOptions && (
         <Card className="mb-4">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -257,12 +293,12 @@ export function RecipesPage() {
               <div>
                 <label className="text-xs font-medium text-gray-500 mb-1.5 block">Tags</label>
                 <div className="flex flex-wrap gap-1.5">
-                  {filterOptions.tags.map((tag) => (
+                  {filterOptions.tags.map((t) => (
                     <FilterChip
-                      key={tag}
-                      label={tag}
-                      selected={selectedTags.has(tag)}
-                      onClick={() => setSelectedTags(toggleSet(selectedTags, tag))}
+                      key={t}
+                      label={t}
+                      selected={selectedTags.has(t)}
+                      onClick={() => setSelectedTags(toggleSet(selectedTags, t))}
                     />
                   ))}
                 </div>
@@ -272,17 +308,17 @@ export function RecipesPage() {
         </Card>
       )}
 
-      {!recipes?.length ? (
+      {!hasAnyRecipes && !isLoading ? (
         <EmptyState
           icon={BookOpen}
           title="Nog geen recepten"
           description="Voeg je eerste recept toe via scan of URL!"
         />
-      ) : !filtered?.length ? (
+      ) : allRecipes.length === 0 && !isLoading ? (
         <EmptyState icon={Search} title="Geen recepten gevonden" />
       ) : (
         <div className="flex flex-col gap-4">
-          {filtered.map((recipe) => {
+          {allRecipes.map((recipe) => {
             const images = recipe.images ?? [];
             const displayImage = images.find((img) => img.caption !== "scan-original") ?? images[0];
             const totalTime = (recipe.prepTimeMinutes ?? 0) + (recipe.cookTimeMinutes ?? 0);
@@ -352,6 +388,14 @@ export function RecipesPage() {
               </Link>
             );
           })}
+
+          {/* Infinite scroll sentinel */}
+          <div ref={sentinelRef} className="h-1" />
+          {isFetchingNextPage && (
+            <div className="flex justify-center py-4">
+              <Loader2 className="animate-spin text-gray-400" size={24} />
+            </div>
+          )}
         </div>
       )}
     </div>

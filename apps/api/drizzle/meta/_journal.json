@@ -71,6 +71,13 @@
       "when": 1774083610738,
       "tag": "0009_silent_iceman",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1774162925615,
+      "tag": "0010_mushy_sally_floyd",
+      "breakpoints": true
     }
   ]
 }

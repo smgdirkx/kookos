@@ -316,6 +316,9 @@ export function CommunityRecipesPage() {
       }),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["recipes"] });
+      queryClient.invalidateQueries({ queryKey: ["recipe-filters"] });
+      queryClient.invalidateQueries({ queryKey: ["recipes-count"] });
+      queryClient.invalidateQueries({ queryKey: ["recipes-all"] });
       setSelected(new Set());
       navigate("/add-recipe", {
         replace: true,
