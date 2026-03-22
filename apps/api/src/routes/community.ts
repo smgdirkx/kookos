@@ -3,6 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../db/index.js";
 import { recipeImages, recipeIngredients, recipes, recipeTags, users } from "../db/schema.js";
+import { copyS3Image } from "../image.js";
 import { requireAuth } from "../middleware.js";
 import type { AppEnv } from "../types.js";
 
@@ -186,16 +187,17 @@ app.post("/copy", async (c) => {
       );
     }
 
-    // Copy images (share same S3 keys)
-    if (source.images.length) {
-      await db.insert(recipeImages).values(
-        source.images.map((img) => ({
+    // Copy images (duplicate in S3 so deleting the original doesn't break the copy)
+    for (const img of source.images) {
+      const newKey = await copyS3Image(img.url, newRecipe.id);
+      if (newKey) {
+        await db.insert(recipeImages).values({
           recipeId: newRecipe.id,
-          url: img.url,
+          url: newKey,
           isPrimary: img.isPrimary,
           caption: img.caption,
-        })),
-      );
+        });
+      }
     }
 
     // Copy tags (reuse existing tag records)

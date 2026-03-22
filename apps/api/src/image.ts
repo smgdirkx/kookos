@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { CopyObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import sharp from "sharp";
 import { S3_BUCKET, s3 } from "./s3.js";
 
@@ -75,6 +75,30 @@ export async function uploadExternalImage(
     return key;
   } catch (err: unknown) {
     console.error("Failed to upload external image:", err);
+    return null;
+  }
+}
+
+/**
+ * Copies an existing S3 image to a new key under a different recipe.
+ * Returns the new S3 key, or null if the copy fails.
+ */
+export async function copyS3Image(sourceKey: string, newRecipeId: string): Promise<string | null> {
+  try {
+    const ext = sourceKey.split(".").pop() || "webp";
+    const newKey = `recipes/${newRecipeId}/${crypto.randomUUID()}.${ext}`;
+
+    await s3.send(
+      new CopyObjectCommand({
+        Bucket: S3_BUCKET,
+        CopySource: `${S3_BUCKET}/${sourceKey}`,
+        Key: newKey,
+      }),
+    );
+
+    return newKey;
+  } catch (err: unknown) {
+    console.error("Failed to copy S3 image:", err);
     return null;
   }
 }
