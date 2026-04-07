@@ -199,6 +199,7 @@ export const mealPlanItems = pgTable("meal_plan_items", {
   date: date("date").notNull(),
   mealType: varchar("meal_type", { length: 20 }).notNull(),
   checked: boolean("checked").notNull().default(false),
+  note: text("note"),
 });
 
 export const shoppingLists = pgTable("shopping_lists", {

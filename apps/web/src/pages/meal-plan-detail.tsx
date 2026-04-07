@@ -14,14 +14,16 @@ import {
   AlertTriangle,
   ArrowLeft,
   Calendar,
+  Check,
   GripVertical,
   Plus,
   Search,
   ShoppingCart,
+  StickyNote,
   Trash2,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button, Card, Input, Loading, RecipePlaceholder, useConfirm } from "@/components/ui";
 import { api } from "@/lib/api";
@@ -33,6 +35,7 @@ type MealPlanItem = {
   date: string;
   mealType: string;
   checked: boolean;
+  note?: string | null;
   recipe: {
     id: string;
     title: string;
@@ -68,10 +71,26 @@ type Recipe = {
 
 const dayNames = ["Zo", "Ma", "Di", "Wo", "Do", "Vr", "Za"];
 
-function SortableItem({ item, onDelete }: { item: MealPlanItem; onDelete: (id: string) => void }) {
+function SortableItem({
+  item,
+  onDelete,
+  onSaveNote,
+}: {
+  item: MealPlanItem;
+  onDelete: (id: string) => void;
+  onSaveNote: (id: string, note: string) => void;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
   });
+
+  const [editingNote, setEditingNote] = useState(false);
+  const [noteDraft, setNoteDraft] = useState(item.note ?? "");
+  const noteRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (editingNote) noteRef.current?.focus();
+  }, [editingNote]);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -82,6 +101,21 @@ function SortableItem({ item, onDelete }: { item: MealPlanItem; onDelete: (id: s
   const dayName = dayNames[date.getDay()];
   const images = item.recipe.images ?? [];
   const displayImage = images.find((img) => img.caption !== "scan-original") ?? images[0];
+
+  function startEditingNote() {
+    setNoteDraft(item.note ?? "");
+    setEditingNote(true);
+  }
+
+  function saveNote() {
+    onSaveNote(item.id, noteDraft);
+    setEditingNote(false);
+  }
+
+  function cancelNote() {
+    setNoteDraft(item.note ?? "");
+    setEditingNote(false);
+  }
 
   return (
     <div
@@ -116,6 +150,16 @@ function SortableItem({ item, onDelete }: { item: MealPlanItem; onDelete: (id: s
         </Link>
         <button
           type="button"
+          onClick={startEditingNote}
+          className={`p-1 transition-colors ${
+            item.note ? "text-primary" : "text-gray-300 hover:text-gray-500"
+          }`}
+          title={item.note ? "Opmerking bewerken" : "Opmerking toevoegen"}
+        >
+          <StickyNote size={14} />
+        </button>
+        <button
+          type="button"
           onClick={() => onDelete(item.id)}
           className="text-gray-300 hover:text-danger transition-colors p-1"
         >
@@ -134,6 +178,44 @@ function SortableItem({ item, onDelete }: { item: MealPlanItem; onDelete: (id: s
               {c.content}
             </div>
           ))}
+      {editingNote ? (
+        <div className="mt-2 ml-8 flex items-start gap-1.5">
+          <textarea
+            ref={noteRef}
+            value={noteDraft}
+            onChange={(e) => setNoteDraft(e.target.value)}
+            placeholder="Opmerking voor dit weekmenu..."
+            rows={2}
+            className="flex-1 text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-primary resize-none"
+          />
+          <button
+            type="button"
+            onClick={saveNote}
+            className="p-1 text-primary hover:bg-primary/10 rounded"
+            title="Opslaan"
+          >
+            <Check size={14} />
+          </button>
+          <button
+            type="button"
+            onClick={cancelNote}
+            className="p-1 text-gray-400 hover:bg-gray-100 rounded"
+            title="Annuleren"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      ) : (
+        item.note && (
+          <button
+            type="button"
+            onClick={startEditingNote}
+            className="mt-2 ml-8 w-[calc(100%-2rem)] text-left text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 hover:bg-gray-100 transition-colors whitespace-pre-wrap"
+          >
+            {item.note}
+          </button>
+        )
+      )}
     </div>
   );
 }
@@ -178,6 +260,15 @@ export function MealPlanDetailPage() {
   const deleteItemMutation = useMutation({
     mutationFn: (itemId: string) =>
       api(`/api/meal-plans/${id}/items/${itemId}`, { method: "DELETE" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["meal-plan", id] }),
+  });
+
+  const updateNoteMutation = useMutation({
+    mutationFn: ({ itemId, note }: { itemId: string; note: string }) =>
+      api(`/api/meal-plans/${id}/items/${itemId}`, {
+        method: "PATCH",
+        body: { note },
+      }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["meal-plan", id] }),
   });
 
@@ -320,7 +411,12 @@ export function MealPlanDetailPage() {
         >
           <div className="flex flex-col gap-2 mb-4">
             {sortedItems.map((item) => (
-              <SortableItem key={item.id} item={item} onDelete={handleDeleteItem} />
+              <SortableItem
+                key={item.id}
+                item={item}
+                onDelete={handleDeleteItem}
+                onSaveNote={(itemId, note) => updateNoteMutation.mutate({ itemId, note })}
+              />
             ))}
           </div>
         </SortableContext>

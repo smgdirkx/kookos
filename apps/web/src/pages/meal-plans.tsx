@@ -1,5 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CalendarDays, Check, ChevronDown, Clock, Pencil, Plus } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarDays,
+  Check,
+  ChevronDown,
+  Clock,
+  Pencil,
+  Plus,
+  StickyNote,
+} from "lucide-react";
 import { useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import {
@@ -18,6 +27,7 @@ type MealPlanItem = {
   id: string;
   date: string;
   checked: boolean;
+  note?: string | null;
   recipe: {
     id: string;
     title: string;
@@ -116,6 +126,12 @@ function CheckableItem({
               </div>
             );
           })()}
+        {!item.checked && item.note && (
+          <p className="flex items-start gap-1 mt-0.5 text-[11px] text-gray-500 whitespace-pre-wrap">
+            <StickyNote size={10} className="shrink-0 mt-0.5 text-primary" />
+            <span className="line-clamp-2">{item.note}</span>
+          </p>
+        )}
       </div>
     </div>
   );

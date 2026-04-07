@@ -235,22 +235,28 @@ app.patch("/:id/items/reorder", async (c) => {
   return c.json({ ok: true });
 });
 
-// Toggle item checked state
+// Update item (checked state and/or note)
 app.patch("/:id/items/:itemId", async (c) => {
   const id = c.req.param("id");
   const itemId = c.req.param("itemId");
   const user = c.get("user")!;
-  const body = await c.req.json();
-  const { checked } = body as { checked: boolean };
+  const body = (await c.req.json()) as { checked?: boolean; note?: string | null };
 
   const plan = await db.query.mealPlans.findFirst({
     where: sql`${mealPlans.id} = ${id} AND ${mealPlans.userId} = ${user.id}`,
   });
   if (!plan) return c.json({ error: "Not found" }, 404);
 
+  const updates: { checked?: boolean; note?: string | null } = {};
+  if (typeof body.checked === "boolean") updates.checked = body.checked;
+  if (body.note !== undefined) {
+    const trimmed = body.note?.trim() ?? "";
+    updates.note = trimmed.length > 0 ? trimmed : null;
+  }
+
   const [updated] = await db
     .update(mealPlanItems)
-    .set({ checked })
+    .set(updates)
     .where(eq(mealPlanItems.id, itemId))
     .returning();
 
