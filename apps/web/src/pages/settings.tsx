@@ -130,7 +130,8 @@ export function SettingsPage() {
         <h2 className="text-lg font-semibold mb-3">Voedingsvoorkeuren</h2>
         <p className="text-sm text-gray-500 mb-4">
           Standaard worden alleen vegetarische recepten getoond. Zet een optie aan om ook recepten
-          met vlees of vis te zien.
+          met vlees of vis te zien. Bij het importeren of scannen worden vlees en vis automatisch
+          vervangen door vegetarische alternatieven als de bijbehorende optie uit staat.
         </p>
         <div className="space-y-3">
           <label className="flex items-center justify-between rounded-xl bg-white p-4 shadow-xs">
