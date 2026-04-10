@@ -14,8 +14,10 @@ import {
   CalendarPlus,
   Check,
   ExternalLink,
+  Heart,
   ImagePlus,
   Lightbulb,
+  Loader2,
   MessageCircle,
   Minus,
   Pencil,
@@ -382,6 +384,83 @@ function MealPlanHistoryModal({
   );
 }
 
+function ShareRecipeModal({
+  recipeId,
+  open,
+  onClose,
+  onShared,
+}: {
+  recipeId: string;
+  open: boolean;
+  onClose: () => void;
+  onShared: () => void;
+}) {
+  const [comment, setComment] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleShare() {
+    if (!comment.trim()) return;
+    setSubmitting(true);
+    try {
+      await api(`/api/shares/${recipeId}`, {
+        method: "POST",
+        body: { comment: comment.trim() },
+      });
+      setComment("");
+      onShared();
+      onClose();
+    } catch {
+      setSubmitting(false);
+    }
+  }
+
+  if (!open) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+      <button
+        type="button"
+        className="fixed inset-0 bg-black/40 animate-fade-in cursor-default"
+        onClick={onClose}
+        aria-label="Sluiten"
+        tabIndex={-1}
+      />
+      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-5 animate-scale-in">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold">Recept delen</h2>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X size={18} />
+          </button>
+        </div>
+        <p className="text-sm text-gray-500 mb-3">
+          Deel dit recept met de community. Voeg een korte toelichting toe waarom je dit recept
+          aanraadt.
+        </p>
+        <Textarea
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          placeholder="Bijv. 'Heerlijk simpel doordeweeks gerecht!'"
+          rows={3}
+          className="mb-4"
+        />
+        <div className="flex gap-3">
+          <Button
+            variant="primary"
+            size="lg"
+            fullWidth
+            icon={submitting ? Loader2 : Heart}
+            disabled={!comment.trim() || submitting}
+            onClick={handleShare}
+          >
+            {submitting ? "Delen..." : "Deel met community"}
+          </Button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 export function RecipePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -401,6 +480,7 @@ export function RecipePage() {
   const [editData, setEditData] = useState<EditData | null>(null);
   const [showAddToMealPlan, setShowAddToMealPlan] = useState(false);
   const [showMealPlanHistory, setShowMealPlanHistory] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const carouselRef = useRef<HTMLDivElement>(null);
   const [activeSlide, setActiveSlide] = useState(0);
 
@@ -419,6 +499,20 @@ export function RecipePage() {
     queryKey: ["recipe-meal-plans", id],
     queryFn: () => api(`/api/meal-plans/by-recipe/${id}`),
     enabled: !!id,
+  });
+
+  const { data: shareStatus } = useQuery<{ shared: boolean; comment: string | null }>({
+    queryKey: ["share-status", id],
+    queryFn: () => api(`/api/shares/status/${id}`),
+    enabled: !!id,
+  });
+
+  const unshareMutation = useMutation({
+    mutationFn: () => api(`/api/shares/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["share-status", id] });
+      queryClient.invalidateQueries({ queryKey: ["shared-recipes"] });
+    },
   });
 
   const deleteMutation = useMutation({
@@ -725,6 +819,19 @@ export function RecipePage() {
               <div className="flex-1" />
               <button
                 type="button"
+                onClick={() => {
+                  if (shareStatus?.shared) unshareMutation.mutate();
+                  else setShowShareModal(true);
+                }}
+                className="p-2 rounded-full text-white/90 hover:bg-white/15 transition-colors"
+              >
+                <Heart
+                  size={20}
+                  className={shareStatus?.shared ? "fill-red-500 text-red-500" : ""}
+                />
+              </button>
+              <button
+                type="button"
                 onClick={() => imageInputRef.current?.click()}
                 disabled={uploading}
                 className="p-2 rounded-full text-white/90 hover:bg-white/15 transition-colors"
@@ -774,6 +881,19 @@ export function RecipePage() {
                 <span className="hidden sm:inline">Toevoegen aan </span>Weekmenu
               </button>
               <div className="flex-1" />
+              <button
+                type="button"
+                onClick={() => {
+                  if (shareStatus?.shared) unshareMutation.mutate();
+                  else setShowShareModal(true);
+                }}
+                className="p-2 rounded-full text-white/90 hover:bg-white/15 transition-colors"
+              >
+                <Heart
+                  size={20}
+                  className={shareStatus?.shared ? "fill-red-500 text-red-500" : ""}
+                />
+              </button>
               <button
                 type="button"
                 onClick={() => imageInputRef.current?.click()}
@@ -1378,6 +1498,15 @@ export function RecipePage() {
         plans={recipeMealPlans}
         open={showMealPlanHistory}
         onClose={() => setShowMealPlanHistory(false)}
+      />
+      <ShareRecipeModal
+        recipeId={id!}
+        open={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        onShared={() => {
+          queryClient.invalidateQueries({ queryKey: ["share-status", id] });
+          queryClient.invalidateQueries({ queryKey: ["shared-recipes"] });
+        }}
       />
     </div>
   );

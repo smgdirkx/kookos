@@ -5,7 +5,6 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Layout } from "@/components/layout";
 import { useAuthStore } from "@/lib/auth";
 import { AddRecipePage } from "@/pages/add-recipe";
-import { AddUserPage } from "@/pages/add-user";
 import { CommunityRecipesPage } from "@/pages/community-recipes";
 import { ExternalRecipesPage } from "@/pages/external-recipes";
 import { LoginPage } from "@/pages/login";
@@ -14,6 +13,9 @@ import { MealPlanDetailPage } from "@/pages/meal-plan-detail";
 import { MealPlansPage } from "@/pages/meal-plans";
 import { RecipePage } from "@/pages/recipe";
 import { RecipesPage } from "@/pages/recipes";
+import { RegisterPage } from "@/pages/register";
+import { SettingsPage } from "@/pages/settings";
+import { SharedRecipesPage } from "@/pages/shared-recipes";
 import { ShoppingListDetailPage } from "@/pages/shopping-list-detail";
 import { ShoppingListsPage } from "@/pages/shopping-lists";
 import "./index.css";
@@ -26,12 +28,19 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const user = useAuthStore((s) => s.user);
+  if (!user?.email.endsWith("@drkx.nl")) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
           <Route
             element={
               <ProtectedRoute>
@@ -49,7 +58,15 @@ createRoot(document.getElementById("root")!).render(
             <Route path="add-recipe" element={<AddRecipePage />} />
             <Route path="add-recipe/community" element={<CommunityRecipesPage />} />
             <Route path="add-recipe/groentenabonnement" element={<ExternalRecipesPage />} />
-            <Route path="add-recipe/gebruiker" element={<AddUserPage />} />
+            <Route path="shared-recipes" element={<SharedRecipesPage />} />
+            <Route
+              path="instellingen"
+              element={
+                <AdminRoute>
+                  <SettingsPage />
+                </AdminRoute>
+              }
+            />
           </Route>
         </Routes>
       </BrowserRouter>

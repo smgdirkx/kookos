@@ -14,8 +14,11 @@ import commentRoutes from "./routes/comments.js";
 import communityRoutes from "./routes/community.js";
 import externalRecipeRoutes from "./routes/external-recipes.js";
 import imageRoutes from "./routes/images.js";
+import invitationCodeRoutes from "./routes/invitation-codes.js";
 import mealPlanRoutes from "./routes/meal-plans.js";
 import recipeRoutes from "./routes/recipes.js";
+import registerRoutes from "./routes/register.js";
+import shareRoutes from "./routes/shares.js";
 import shoppingListRoutes from "./routes/shopping-lists.js";
 import tagRoutes from "./routes/tags.js";
 import userRoutes from "./routes/users.js";
@@ -42,6 +45,9 @@ app.on(["POST", "GET"], "/api/auth/*", (c) => {
   return auth.handler(c.req.raw);
 });
 
+// Public routes (no auth required)
+app.route("/api/register", registerRoutes);
+
 // Session middleware for all /api routes
 app.use("/api/*", authMiddleware);
 
@@ -55,7 +61,9 @@ app.route("/api/images", imageRoutes);
 app.route("/api/tags", tagRoutes);
 app.route("/api/external-recipes", externalRecipeRoutes);
 app.route("/api/community", communityRoutes);
+app.route("/api/shares", shareRoutes);
 app.route("/api/users", userRoutes);
+app.route("/api/invitation-codes", invitationCodeRoutes);
 
 // Health check
 app.get("/health", (c) => c.json({ status: "ok" }));

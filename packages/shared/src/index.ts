@@ -166,6 +166,18 @@ export const generateMealPlanSchema = z.object({
   preferences: z.string().optional(),
 });
 
+// ── Recipe share schemas ──
+
+export const shareRecipeSchema = z.object({
+  comment: z.string().min(1).max(500),
+});
+
+export const searchSharedRecipesSchema = z.object({
+  query: z.string().optional(),
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(50).default(20),
+});
+
 // ── Community recipe schemas ──
 
 export const searchCommunityRecipesSchema = z.object({
@@ -222,3 +234,5 @@ export type PasteRecipe = z.infer<typeof pasteRecipeSchema>;
 export type GenerateMealPlan = z.infer<typeof generateMealPlanSchema>;
 export type SearchCommunityRecipes = z.infer<typeof searchCommunityRecipesSchema>;
 export type CopyCommunityRecipes = z.infer<typeof copyCommunityRecipesSchema>;
+export type ShareRecipe = z.infer<typeof shareRecipeSchema>;
+export type SearchSharedRecipes = z.infer<typeof searchSharedRecipesSchema>;

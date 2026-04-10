@@ -1,15 +1,18 @@
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { LucideIcon } from "lucide-react";
 import {
   BookOpen,
   CalendarDays,
   EllipsisVertical,
+  Heart,
   LogOut,
   Plus,
+  Settings,
   ShoppingCart,
-  UserPlus,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { api } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth";
 
 const leftTabs: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = [
@@ -18,7 +21,7 @@ const leftTabs: { to: string; label: string; icon: LucideIcon; end?: boolean }[]
 ];
 
 const rightTabs: { to: string; label: string; icon: LucideIcon }[] = [
-  { to: "/shopping-lists", label: "Boodschap", icon: ShoppingCart },
+  { to: "/shared-recipes", label: "Aanbevolen", icon: Heart },
 ];
 
 function TabLink({
@@ -26,11 +29,13 @@ function TabLink({
   label,
   icon: Icon,
   end,
+  badge,
 }: {
   to: string;
   label: string;
   icon: LucideIcon;
   end?: boolean;
+  badge?: number;
 }) {
   return (
     <NavLink
@@ -44,7 +49,14 @@ function TabLink({
     >
       {({ isActive }: { isActive: boolean }) => (
         <>
-          <Icon size={22} strokeWidth={isActive ? 2.5 : 2} className="mb-0.5" />
+          <span className="relative">
+            <Icon size={22} strokeWidth={isActive ? 2.5 : 2} className="mb-0.5" />
+            {badge != null && badge > 0 && (
+              <span className="absolute -top-1.5 -right-2.5 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-4 h-4 flex items-center justify-center px-1">
+                {badge > 99 ? "99+" : badge}
+              </span>
+            )}
+          </span>
           <span className={isActive ? "font-medium" : ""}>{label}</span>
         </>
       )}
@@ -54,10 +66,27 @@ function TabLink({
 
 export function Layout() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const queryClient = useQueryClient();
   const logout = useAuthStore((s) => s.logout);
   const user = useAuthStore((s) => s.user);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const { data: unseenData } = useQuery<{ count: number }>({
+    queryKey: ["shared-unseen-count"],
+    queryFn: () => api("/api/shares/unseen-count"),
+    refetchInterval: 60_000,
+  });
+
+  // Mark as seen when visiting shared-recipes page
+  useEffect(() => {
+    if (location.pathname === "/shared-recipes" && unseenData?.count) {
+      api("/api/shares/mark-seen", { method: "POST" }).then(() => {
+        queryClient.invalidateQueries({ queryKey: ["shared-unseen-count"] });
+      });
+    }
+  }, [location.pathname, unseenData?.count, queryClient]);
 
   async function handleLogout() {
     setMenuOpen(false);
@@ -110,7 +139,11 @@ export function Layout() {
           <div className="w-12" />
 
           {rightTabs.map((tab) => (
-            <TabLink key={tab.to} {...tab} />
+            <TabLink
+              key={tab.to}
+              {...tab}
+              badge={tab.to === "/shared-recipes" ? unseenData?.count : undefined}
+            />
           ))}
 
           <div ref={menuRef} className="relative">
@@ -136,13 +169,26 @@ export function Layout() {
                   type="button"
                   onClick={() => {
                     setMenuOpen(false);
-                    navigate("/add-recipe/gebruiker");
+                    navigate("/shopping-lists");
                   }}
                   className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                 >
-                  <UserPlus size={16} />
-                  <span>Gebruiker toevoegen</span>
+                  <ShoppingCart size={16} />
+                  <span>Boodschappenlijst</span>
                 </button>
+                {user?.email.endsWith("@drkx.nl") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      navigate("/instellingen");
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <Settings size={16} />
+                    <span>Instellingen</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={handleLogout}

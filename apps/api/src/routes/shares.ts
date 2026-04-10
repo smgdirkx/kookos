@@ -1,8 +1,19 @@
-import { copyCommunityRecipesSchema, searchCommunityRecipesSchema } from "@kookos/shared";
-import { eq, sql } from "drizzle-orm";
+import {
+  copyCommunityRecipesSchema,
+  searchSharedRecipesSchema,
+  shareRecipeSchema,
+} from "@kookos/shared";
+import { and, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../db/index.js";
-import { recipeImages, recipeIngredients, recipes, recipeTags, users } from "../db/schema.js";
+import {
+  recipeImages,
+  recipeIngredients,
+  recipeShares,
+  recipes,
+  recipeTags,
+  users,
+} from "../db/schema.js";
 import { copyS3Image } from "../image.js";
 import { requireAuth } from "../middleware.js";
 import type { AppEnv } from "../types.js";
@@ -11,57 +22,119 @@ const app = new Hono<AppEnv>();
 
 const S3_PUBLIC_URL = process.env.S3_PUBLIC_URL;
 
-function withImageUrls<T extends { images?: { url: string }[] }>(recipe: T): T {
-  if (recipe.images) {
-    const base = S3_PUBLIC_URL || "/images/kookos";
-    recipe.images = recipe.images.map((img) => ({
-      ...img,
-      url: `${base}/${img.url}`,
-    }));
-  }
-  return recipe;
-}
-
 app.use("*", requireAuth);
 
-// List users with recipe counts (all users including current)
-app.get("/users", async (c) => {
-  const result = await db
-    .select({
-      id: users.id,
-      name: users.name,
-      recipeCount: sql<number>`count(${recipes.id})::int`,
-    })
-    .from(users)
-    .leftJoin(recipes, eq(recipes.userId, users.id))
-    .groupBy(users.id, users.name)
-    .having(sql`count(${recipes.id}) > 0`)
-    .orderBy(users.name);
+// Count unseen shared recipes (shares created after user's lastSeenSharedAt)
+app.get("/unseen-count", async (c) => {
+  const currentUserId = c.get("user")!.id;
 
-  return c.json(result);
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, currentUserId),
+    columns: { lastSeenSharedAt: true },
+  });
+
+  const lastSeen = user?.lastSeenSharedAt;
+
+  // Count shares from OTHER users that are newer than lastSeen
+  const whereClause = lastSeen
+    ? sql`${recipeShares.userId} != ${currentUserId} AND ${recipeShares.createdAt} > ${lastSeen}`
+    : sql`${recipeShares.userId} != ${currentUserId}`;
+
+  const [result] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(recipeShares)
+    .where(whereClause);
+
+  return c.json({ count: result.count });
 });
 
-// List / search community recipes
-app.get("/recipes", async (c) => {
-  const parsed = searchCommunityRecipesSchema.safeParse({
-    userId: c.req.query("userId"),
+// Mark shared recipes as seen
+app.post("/mark-seen", async (c) => {
+  const currentUserId = c.get("user")!.id;
+
+  await db.update(users).set({ lastSeenSharedAt: new Date() }).where(eq(users.id, currentUserId));
+
+  return c.json({ ok: true });
+});
+
+// Share a recipe (heart + comment)
+app.post("/:recipeId", async (c) => {
+  const currentUserId = c.get("user")!.id;
+  const recipeId = c.req.param("recipeId");
+
+  const body = await c.req.json();
+  const parsed = shareRecipeSchema.safeParse(body);
+  if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
+
+  // Verify recipe belongs to current user
+  const recipe = await db.query.recipes.findFirst({
+    where: and(eq(recipes.id, recipeId), eq(recipes.userId, currentUserId)),
+  });
+  if (!recipe) return c.json({ error: "Recept niet gevonden" }, 404);
+
+  // Check if already shared
+  const existing = await db.query.recipeShares.findFirst({
+    where: and(eq(recipeShares.recipeId, recipeId), eq(recipeShares.userId, currentUserId)),
+  });
+  if (existing) return c.json({ error: "Al gedeeld" }, 409);
+
+  const [share] = await db
+    .insert(recipeShares)
+    .values({
+      recipeId,
+      userId: currentUserId,
+      comment: parsed.data.comment,
+    })
+    .returning();
+
+  return c.json(share, 201);
+});
+
+// Remove share (unheart)
+app.delete("/:recipeId", async (c) => {
+  const currentUserId = c.get("user")!.id;
+  const recipeId = c.req.param("recipeId");
+
+  const result = await db
+    .delete(recipeShares)
+    .where(and(eq(recipeShares.recipeId, recipeId), eq(recipeShares.userId, currentUserId)))
+    .returning();
+
+  if (result.length === 0) return c.json({ error: "Niet gevonden" }, 404);
+  return c.json({ ok: true });
+});
+
+// Check if current user has shared a specific recipe
+app.get("/status/:recipeId", async (c) => {
+  const currentUserId = c.get("user")!.id;
+  const recipeId = c.req.param("recipeId");
+
+  const share = await db.query.recipeShares.findFirst({
+    where: and(eq(recipeShares.recipeId, recipeId), eq(recipeShares.userId, currentUserId)),
+  });
+
+  return c.json({ shared: !!share, comment: share?.comment ?? null });
+});
+
+// List all shared recipes (from all users, for the feed)
+app.get("/", async (c) => {
+  const parsed = searchSharedRecipesSchema.safeParse({
     query: c.req.query("q"),
     page: c.req.query("page"),
     limit: c.req.query("limit"),
   });
   if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
 
-  const { userId, query, page, limit } = parsed.data;
+  const { query, page, limit } = parsed.data;
   const offset = (page - 1) * limit;
   const trimmedQuery = query?.trim();
-
   const imageBase = S3_PUBLIC_URL || "/images/kookos";
 
-  let whereClause = userId ? sql`${recipes.userId} = ${userId}` : sql`TRUE`;
+  let whereClause = sql`TRUE`;
 
   if (trimmedQuery) {
     const likePattern = `%${trimmedQuery}%`;
-    whereClause = sql`${whereClause} AND (
+    whereClause = sql`(
       ${recipes.searchVector} @@ plainto_tsquery('dutch', ${trimmedQuery})
       OR ${recipes.title} ILIKE ${likePattern}
       OR EXISTS (
@@ -86,19 +159,18 @@ app.get("/recipes", async (c) => {
         WHERE ${recipeImages.recipeId} = ${recipes.id} AND ${recipeImages.isPrimary} = true
         LIMIT 1
       )`,
+      shareComment: recipeShares.comment,
+      sharedAt: recipeShares.createdAt,
+      sharedByName: users.name,
     })
-    .from(recipes)
-    .innerJoin(users, eq(users.id, recipes.userId))
+    .from(recipeShares)
+    .innerJoin(recipes, eq(recipes.id, recipeShares.recipeId))
+    .innerJoin(users, eq(users.id, recipeShares.userId))
     .where(whereClause)
-    .orderBy(
-      trimmedQuery
-        ? sql`CASE WHEN ${recipes.searchVector} @@ plainto_tsquery('dutch', ${trimmedQuery}) THEN 0 ELSE 1 END, ${recipes.title} ASC`
-        : sql`${recipes.title} ASC`,
-    )
+    .orderBy(sql`${recipeShares.createdAt} DESC`)
     .limit(limit)
     .offset(offset);
 
-  // Prefix image URLs
   const mapped = result.map((r) => ({
     ...r,
     imageUrl: r.imageUrl ? `${imageBase}/${r.imageUrl}` : null,
@@ -107,8 +179,8 @@ app.get("/recipes", async (c) => {
   return c.json(mapped);
 });
 
-// Get single community recipe (view-only detail)
-app.get("/recipes/:id", async (c) => {
+// Get single shared recipe detail (for modal preview)
+app.get("/recipe/:id", async (c) => {
   const id = c.req.param("id");
 
   const result = await db.query.recipes.findFirst({
@@ -123,11 +195,19 @@ app.get("/recipes/:id", async (c) => {
 
   if (!result) return c.json({ error: "Not found" }, 404);
 
-  const { user, ...recipe } = withImageUrls(result);
+  const imageBase = S3_PUBLIC_URL || "/images/kookos";
+  if (result.images) {
+    result.images = result.images.map((img) => ({
+      ...img,
+      url: `${imageBase}/${img.url}`,
+    }));
+  }
+
+  const { user, ...recipe } = result;
   return c.json({ ...recipe, userName: user.name });
 });
 
-// Copy recipes to current user
+// Copy shared recipes to current user (reuse community copy logic)
 app.post("/copy", async (c) => {
   const currentUserId = c.get("user")!.id;
   const body = await c.req.json();
@@ -138,7 +218,6 @@ app.post("/copy", async (c) => {
   let copied = 0;
 
   for (const recipeId of recipeIds) {
-    // Fetch source recipe with all related data
     const source = await db.query.recipes.findFirst({
       where: eq(recipes.id, recipeId),
       with: {
@@ -150,12 +229,10 @@ app.post("/copy", async (c) => {
 
     if (!source || source.userId === currentUserId) continue;
 
-    // Fetch source user name
     const sourceUser = await db.query.users.findFirst({
       where: eq(users.id, source.userId),
     });
 
-    // Create new recipe for current user
     const [newRecipe] = await db
       .insert(recipes)
       .values({
@@ -176,7 +253,6 @@ app.post("/copy", async (c) => {
       })
       .returning();
 
-    // Copy ingredients
     if (source.ingredients.length) {
       await db.insert(recipeIngredients).values(
         source.ingredients.map((ing) => ({
@@ -192,7 +268,6 @@ app.post("/copy", async (c) => {
       );
     }
 
-    // Copy images (duplicate in S3 so deleting the original doesn't break the copy)
     for (const img of source.images) {
       const newKey = await copyS3Image(img.url, newRecipe.id);
       if (newKey) {
@@ -205,14 +280,12 @@ app.post("/copy", async (c) => {
       }
     }
 
-    // Copy tags (reuse existing tag records)
     for (const rt of source.recipeTags) {
       if (rt.tag) {
         await db.insert(recipeTags).values({ recipeId: newRecipe.id, tagId: rt.tag.id });
       }
     }
 
-    // Trigger search vector rebuild
     await db.update(recipes).set({ updatedAt: new Date() }).where(eq(recipes.id, newRecipe.id));
 
     copied++;

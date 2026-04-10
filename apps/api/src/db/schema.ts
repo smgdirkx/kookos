@@ -30,6 +30,7 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").notNull().default(false),
   image: text("image"),
+  lastSeenSharedAt: timestamp("last_seen_shared_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -232,6 +233,40 @@ export const shoppingListItems = pgTable("shopping_list_items", {
 });
 
 // ══════════════════════════════════════════════
+// Recipe shares (heart + share with comment)
+// ══════════════════════════════════════════════
+
+export const recipeShares = pgTable(
+  "recipe_shares",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    recipeId: uuid("recipe_id")
+      .notNull()
+      .references(() => recipes.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    comment: text("comment").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [index("recipe_shares_recipe_idx").on(table.recipeId)],
+);
+
+// ══════════════════════════════════════════════
+// Invitation codes
+// ══════════════════════════════════════════════
+
+export const invitationCodes = pgTable("invitation_codes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  code: varchar("code", { length: 50 }).notNull().unique(),
+  createdBy: text("created_by")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ══════════════════════════════════════════════
 // External recipes (scraped from groentenabonnement.nl)
 // ══════════════════════════════════════════════
 
@@ -260,6 +295,13 @@ export const externalRecipes = pgTable(
 // Relations
 // ══════════════════════════════════════════════
 
+export const invitationCodesRelations = relations(invitationCodes, ({ one }) => ({
+  creator: one(users, {
+    fields: [invitationCodes.createdBy],
+    references: [users.id],
+  }),
+}));
+
 export const usersRelations = relations(users, ({ many }) => ({
   recipes: many(recipes),
   mealPlans: many(mealPlans),
@@ -272,6 +314,7 @@ export const recipesRelations = relations(recipes, ({ one, many }) => ({
   images: many(recipeImages),
   recipeTags: many(recipeTags),
   comments: many(recipeComments),
+  shares: many(recipeShares),
 }));
 
 export const recipeIngredientsRelations = relations(recipeIngredients, ({ one }) => ({
@@ -295,6 +338,17 @@ export const recipeCommentsRelations = relations(recipeComments, ({ one }) => ({
   }),
   user: one(users, {
     fields: [recipeComments.userId],
+    references: [users.id],
+  }),
+}));
+
+export const recipeSharesRelations = relations(recipeShares, ({ one }) => ({
+  recipe: one(recipes, {
+    fields: [recipeShares.recipeId],
+    references: [recipes.id],
+  }),
+  user: one(users, {
+    fields: [recipeShares.userId],
     references: [users.id],
   }),
 }));

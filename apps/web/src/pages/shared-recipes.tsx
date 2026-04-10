@@ -5,10 +5,10 @@ import {
   ChevronRight,
   Copy,
   Eye,
+  Heart,
   Loader2,
   Search,
   Square,
-  Users,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -17,13 +17,7 @@ import { useNavigate } from "react-router-dom";
 import { Button, EmptyState, Input, Loading, PageHeader, Tag } from "@/components/ui";
 import { api } from "@/lib/api";
 
-type CommunityUser = {
-  id: string;
-  name: string;
-  recipeCount: number;
-};
-
-type CommunityRecipe = {
+type SharedRecipe = {
   id: string;
   title: string;
   description: string | null;
@@ -31,6 +25,9 @@ type CommunityRecipe = {
   cuisine: string | null;
   userName: string;
   imageUrl: string | null;
+  shareComment: string;
+  sharedAt: string;
+  sharedByName: string;
 };
 
 type RecipeDetail = {
@@ -62,6 +59,8 @@ const PAGE_SIZE = 20;
 
 function RecipePreviewModal({
   recipeId,
+  shareComment,
+  sharedByName,
   onClose,
   onPrev,
   onNext,
@@ -69,6 +68,8 @@ function RecipePreviewModal({
   hasNext,
 }: {
   recipeId: string;
+  shareComment: string;
+  sharedByName: string;
   onClose: () => void;
   onPrev: () => void;
   onNext: () => void;
@@ -76,14 +77,13 @@ function RecipePreviewModal({
   hasNext: boolean;
 }) {
   const { data: recipe, isLoading } = useQuery({
-    queryKey: ["community-recipe-detail", recipeId],
-    queryFn: () => api<RecipeDetail>(`/api/community/recipes/${recipeId}`),
+    queryKey: ["shared-recipe-detail", recipeId],
+    queryFn: () => api<RecipeDetail>(`/api/shares/recipe/${recipeId}`),
   });
 
   const primaryImage = recipe?.images.find((img) => img.isPrimary);
   const tagNames = recipe?.recipeTags.map((rt) => rt.tag.name) ?? [];
 
-  // Keyboard navigation
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
@@ -129,6 +129,17 @@ function RecipePreviewModal({
 
         {recipe && (
           <div className="pb-4">
+            {/* Share comment banner */}
+            <div className="mx-4 mb-3 p-3 bg-red-50 border border-red-100 rounded-xl">
+              <div className="flex items-start gap-2">
+                <Heart className="w-4 h-4 text-red-500 fill-red-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm text-gray-700">{shareComment}</p>
+                  <p className="text-xs text-gray-400 mt-1">Gedeeld door {sharedByName}</p>
+                </div>
+              </div>
+            </div>
+
             {/* Image */}
             {primaryImage && (
               <img
@@ -241,9 +252,7 @@ function RecipePreviewModal({
 
 // ── Main Page ──
 
-export function CommunityRecipesPage() {
-  const [selectedUser, setSelectedUser] = useState<CommunityUser | null>(null);
-  const [allUsers, setAllUsers] = useState(false);
+export function SharedRecipesPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -260,31 +269,21 @@ export function CommunityRecipesPage() {
     setTimer(setTimeout(() => setDebouncedSearch(value), 300));
   }
 
-  // Fetch users
-  const { data: communityUsers, isLoading: usersLoading } = useQuery({
-    queryKey: ["community-users"],
-    queryFn: () => api<CommunityUser[]>("/api/community/users"),
-  });
-
-  const showRecipes = selectedUser !== null || allUsers;
-
-  // Fetch recipes (infinite scroll)
+  // Fetch shared recipes (infinite scroll)
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
-    queryKey: ["community-recipes", selectedUser?.id, allUsers, debouncedSearch],
+    queryKey: ["shared-recipes", debouncedSearch],
     queryFn: ({ pageParam = 1 }) => {
       const params = new URLSearchParams();
-      if (selectedUser && !allUsers) params.set("userId", selectedUser.id);
       if (debouncedSearch) params.set("q", debouncedSearch);
       params.set("page", String(pageParam));
       params.set("limit", String(PAGE_SIZE));
-      return api<CommunityRecipe[]>(`/api/community/recipes?${params}`);
+      return api<SharedRecipe[]>(`/api/shares?${params}`);
     },
     getNextPageParam: (lastPage, allPages) => {
       if (lastPage.length < PAGE_SIZE) return undefined;
       return allPages.length + 1;
     },
     initialPageParam: 1,
-    enabled: showRecipes,
   });
 
   const recipes = data?.pages.flat() ?? [];
@@ -310,7 +309,7 @@ export function CommunityRecipesPage() {
   // Copy mutation
   const copyMutation = useMutation({
     mutationFn: (recipeIds: string[]) =>
-      api<{ copied: number }>("/api/community/copy", {
+      api<{ copied: number }>("/api/shares/copy", {
         method: "POST",
         body: { recipeIds },
       }),
@@ -320,7 +319,7 @@ export function CommunityRecipesPage() {
       queryClient.invalidateQueries({ queryKey: ["recipes-count"] });
       queryClient.invalidateQueries({ queryKey: ["recipes-all"] });
       setSelected(new Set());
-      navigate("/add-recipe", {
+      navigate("/", {
         replace: true,
         state: { message: `${result.copied} recept(en) gekopieerd` },
       });
@@ -336,197 +335,133 @@ export function CommunityRecipesPage() {
     });
   }
 
-  function handleBack() {
-    if (showRecipes) {
-      setSelectedUser(null);
-      setAllUsers(false);
-      setSearch("");
-      setDebouncedSearch("");
-      setSelected(new Set());
-    } else {
-      navigate("/add-recipe");
-    }
-  }
-
   return (
     <div className={selected.size > 0 ? "pb-28" : ""}>
-      <PageHeader
-        title={showRecipes ? (selectedUser?.name ?? "Alle gebruikers") : "Community"}
-        back={handleBack}
-      />
+      <PageHeader title="Aanbevolen recepten" back={() => navigate("/")} />
 
-      {/* Step 1: User list */}
-      {!showRecipes && (
-        <>
-          {usersLoading && <Loading message="Gebruikers laden..." />}
+      <div className="mb-4 space-y-3">
+        <Input
+          type="search"
+          placeholder="Zoek op naam of ingrediënt..."
+          icon={Search}
+          value={search}
+          onChange={(e) => handleSearch(e.target.value)}
+        />
+      </div>
 
-          {!usersLoading && (!communityUsers || communityUsers.length === 0) && (
-            <EmptyState
-              icon={Users}
-              title="Geen andere gebruikers"
-              description="Er zijn nog geen andere gebruikers met recepten"
-            />
-          )}
+      {isLoading && <Loading message="Recepten laden..." />}
 
-          {!usersLoading && communityUsers && communityUsers.length > 0 && (
-            <div className="space-y-3">
-              <button
-                type="button"
-                onClick={() => setAllUsers(true)}
-                className="w-full flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-200 hover:border-orange-300 hover:bg-orange-50/50 transition-colors text-left"
-              >
-                <div className="flex-shrink-0 w-12 h-12 bg-teal-100 text-teal-600 rounded-xl flex items-center justify-center">
-                  <Users className="w-6 h-6" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-semibold text-gray-900">Alle gebruikers</p>
-                  <p className="text-sm text-gray-500">
-                    {communityUsers.reduce((sum, u) => sum + u.recipeCount, 0)} recepten
-                  </p>
-                </div>
-                <ChevronRight className="w-5 h-5 text-gray-400" />
-              </button>
-
-              {communityUsers.map((user) => (
-                <button
-                  key={user.id}
-                  type="button"
-                  onClick={() => setSelectedUser(user)}
-                  className="w-full flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-200 hover:border-orange-300 hover:bg-orange-50/50 transition-colors text-left"
-                >
-                  <div className="flex-shrink-0 w-12 h-12 bg-orange-100 text-orange-600 rounded-xl flex items-center justify-center font-bold text-lg">
-                    {user.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-semibold text-gray-900">{user.name}</p>
-                    <p className="text-sm text-gray-500">{user.recipeCount} recepten</p>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-gray-400" />
-                </button>
-              ))}
-            </div>
-          )}
-        </>
+      {!isLoading && recipes.length === 0 && (
+        <EmptyState
+          icon={Heart}
+          title="Nog geen gedeelde recepten"
+          description={
+            debouncedSearch
+              ? "Probeer een andere zoekterm"
+              : "Er zijn nog geen recepten gedeeld door de community"
+          }
+        />
       )}
 
-      {/* Step 2: Recipe browser */}
-      {showRecipes && (
-        <>
-          <div className="mb-4 space-y-3">
-            <Input
-              type="search"
-              placeholder="Zoek op naam of ingrediënt..."
-              icon={Search}
-              value={search}
-              onChange={(e) => handleSearch(e.target.value)}
-            />
-          </div>
-
-          {isLoading && <Loading message="Recepten laden..." />}
-
-          {!isLoading && recipes.length === 0 && (
-            <EmptyState
-              icon={Search}
-              title="Geen recepten gevonden"
-              description={
-                debouncedSearch
-                  ? "Probeer een andere zoekterm"
-                  : "Deze gebruiker heeft nog geen recepten"
-              }
-            />
-          )}
-
-          <div className="space-y-3">
-            {recipes.map((recipe, index) => (
-              <div
-                key={recipe.id}
-                className={`flex bg-white rounded-xl border overflow-hidden transition-colors ${
-                  selected.has(recipe.id) ? "border-orange-400 bg-orange-50/30" : "border-gray-200"
-                }`}
+      <div className="space-y-3">
+        {recipes.map((recipe, index) => (
+          <div
+            key={`${recipe.id}-${index}`}
+            className={`bg-white rounded-xl border overflow-hidden transition-colors ${
+              selected.has(recipe.id) ? "border-orange-400 bg-orange-50/30" : "border-gray-200"
+            }`}
+          >
+            <div className="flex">
+              {/* Checkbox: toggles selection */}
+              <button
+                type="button"
+                onClick={() => toggleSelect(recipe.id)}
+                className="flex items-center justify-center w-12 flex-shrink-0 border-r border-gray-100 hover:bg-gray-50 transition-colors"
               >
-                {/* Checkbox: toggles selection */}
-                <button
-                  type="button"
-                  onClick={() => toggleSelect(recipe.id)}
-                  className="flex items-center justify-center w-12 flex-shrink-0 border-r border-gray-100 hover:bg-gray-50 transition-colors"
-                >
-                  {selected.has(recipe.id) ? (
-                    <CheckSquare className="w-5 h-5 text-orange-500" />
-                  ) : (
-                    <Square className="w-5 h-5 text-gray-300" />
-                  )}
-                </button>
+                {selected.has(recipe.id) ? (
+                  <CheckSquare className="w-5 h-5 text-orange-500" />
+                ) : (
+                  <Square className="w-5 h-5 text-gray-300" />
+                )}
+              </button>
 
-                {/* Clickable area: opens preview */}
-                <button
-                  type="button"
-                  onClick={() => setPreviewIndex(index)}
-                  className="flex gap-3 min-w-0 flex-1 text-left"
-                >
-                  <div className="py-2 pl-3 min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-gray-900 line-clamp-1">
-                      {recipe.title}
-                    </p>
-                    {recipe.category && (
-                      <p className="text-xs text-gray-400 mt-0.5">{recipe.category}</p>
-                    )}
-                    {recipe.description && (
-                      <p className="text-xs text-gray-500 mt-1 line-clamp-2">
-                        {recipe.description}
+              {/* Clickable area: opens preview */}
+              <button
+                type="button"
+                onClick={() => setPreviewIndex(index)}
+                className="flex min-w-0 flex-1 text-left"
+              >
+                <div className="py-2 pl-3 min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-gray-900 line-clamp-1">{recipe.title}</p>
+                  {recipe.category && (
+                    <p className="text-xs text-gray-400 mt-0.5">{recipe.category}</p>
+                  )}
+                  {recipe.description && (
+                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">{recipe.description}</p>
+                  )}
+                  <p className="text-xs text-gray-400 mt-1">van {recipe.userName}</p>
+
+                  {/* Share comment */}
+                  <div className="flex items-start gap-1.5 mt-2 pt-2 border-t border-gray-100">
+                    <Heart className="w-3 h-3 text-red-500 fill-red-500 mt-0.5 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-xs text-gray-500 line-clamp-2 italic">
+                        {recipe.shareComment}
                       </p>
-                    )}
-                    <p className="text-xs text-gray-400 mt-1">van {recipe.userName}</p>
-                  </div>
-                  {recipe.imageUrl ? (
-                    <img
-                      src={recipe.imageUrl}
-                      alt={recipe.title}
-                      className="w-20 self-stretch object-cover flex-shrink-0"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="w-20 self-stretch bg-gray-100 flex items-center justify-center flex-shrink-0">
-                      <Eye className="w-5 h-5 text-gray-300" />
+                      <p className="text-[10px] text-gray-400 mt-0.5">
+                        {recipe.sharedByName} &middot;{" "}
+                        {new Date(recipe.sharedAt).toLocaleDateString("nl-NL", {
+                          day: "numeric",
+                          month: "short",
+                        })}
+                      </p>
                     </div>
-                  )}
-                </button>
-              </div>
-            ))}
-
-            <div ref={sentinelRef} />
-            {isFetchingNextPage && <Loading message="Meer laden..." />}
-          </div>
-
-          {/* Fixed bottom copy bar */}
-          {selected.size > 0 && (
-            <div className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] left-0 right-0 z-40">
-              <div className="mx-auto max-w-2xl px-4 py-3">
-                <div className="flex gap-3 bg-white rounded-2xl shadow-lg border border-gray-200 px-4 py-3">
-                  <Button
-                    variant="primary"
-                    size="lg"
-                    className="flex-1"
-                    icon={copyMutation.isPending ? Loader2 : Copy}
-                    disabled={copyMutation.isPending}
-                    onClick={() => copyMutation.mutate([...selected])}
-                  >
-                    {copyMutation.isPending
-                      ? "Kopiëren..."
-                      : `Kopieer ${selected.size} recept${selected.size === 1 ? "" : "en"}`}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    icon={X}
-                    onClick={() => setSelected(new Set())}
-                  >
-                    Annuleren
-                  </Button>
+                  </div>
                 </div>
-              </div>
+                {recipe.imageUrl ? (
+                  <img
+                    src={recipe.imageUrl}
+                    alt={recipe.title}
+                    className="w-20 self-stretch object-cover flex-shrink-0"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="w-20 self-stretch bg-gray-100 flex items-center justify-center flex-shrink-0">
+                    <Eye className="w-5 h-5 text-gray-300" />
+                  </div>
+                )}
+              </button>
             </div>
-          )}
-        </>
+          </div>
+        ))}
+
+        <div ref={sentinelRef} />
+        {isFetchingNextPage && <Loading message="Meer laden..." />}
+      </div>
+
+      {/* Fixed bottom copy bar */}
+      {selected.size > 0 && (
+        <div className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] left-0 right-0 z-40">
+          <div className="mx-auto max-w-2xl px-4 py-3">
+            <div className="flex gap-3 bg-white rounded-2xl shadow-lg border border-gray-200 px-4 py-3">
+              <Button
+                variant="primary"
+                size="lg"
+                className="flex-1"
+                icon={copyMutation.isPending ? Loader2 : Copy}
+                disabled={copyMutation.isPending}
+                onClick={() => copyMutation.mutate([...selected])}
+              >
+                {copyMutation.isPending
+                  ? "Kopiëren..."
+                  : `Kopieer ${selected.size} recept${selected.size === 1 ? "" : "en"}`}
+              </Button>
+              <Button variant="outline" size="lg" icon={X} onClick={() => setSelected(new Set())}>
+                Annuleren
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Copy error */}
@@ -540,6 +475,8 @@ export function CommunityRecipesPage() {
       {previewIndex !== null && recipes[previewIndex] && (
         <RecipePreviewModal
           recipeId={recipes[previewIndex].id}
+          shareComment={recipes[previewIndex].shareComment}
+          sharedByName={recipes[previewIndex].sharedByName}
           onClose={() => setPreviewIndex(null)}
           onPrev={() => setPreviewIndex((i) => Math.max(0, (i ?? 0) - 1))}
           onNext={() => setPreviewIndex((i) => Math.min(recipes.length - 1, (i ?? 0) + 1))}
