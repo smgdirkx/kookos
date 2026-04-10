@@ -104,7 +104,7 @@ export function Layout() {
 
   return (
     <div className="min-h-dvh flex flex-col">
-      <main className="flex-1 mx-auto w-full max-w-2xl px-4 py-6 pb-24">
+      <main className="flex-1 mx-auto w-full max-w-2xl px-4 pt-[calc(env(safe-area-inset-top,0px)+1rem)] pb-24">
         <Outlet />
       </main>
 
