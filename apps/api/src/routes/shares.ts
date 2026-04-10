@@ -118,7 +118,8 @@ app.get("/status/:recipeId", async (c) => {
 
 // List all shared recipes (from all users, for the feed)
 app.get("/", async (c) => {
-  const currentUserId = c.get("user")!.id;
+  const currentUser = c.get("user")!;
+  const currentUserId = currentUser.id;
   const parsed = searchSharedRecipesSchema.safeParse({
     query: c.req.query("q"),
     page: c.req.query("page"),
@@ -131,7 +132,10 @@ app.get("/", async (c) => {
   const trimmedQuery = query?.trim();
   const imageBase = S3_PUBLIC_URL || "/images/kookos";
 
+  // Start with diet preference filters
   let whereClause = sql`TRUE`;
+  if (!currentUser.allowMeat) whereClause = sql`${whereClause} AND ${recipes.hasMeat} = false`;
+  if (!currentUser.allowFish) whereClause = sql`${whereClause} AND ${recipes.hasFish} = false`;
 
   if (trimmedQuery) {
     const likePattern = `%${trimmedQuery}%`;
@@ -255,6 +259,8 @@ app.post("/copy", async (c) => {
         cuisine: source.cuisine,
         category: source.category,
         difficulty: source.difficulty,
+        hasMeat: source.hasMeat,
+        hasFish: source.hasFish,
         source: "community",
         sourceRecipeId: source.id,
         notes: sourceUser ? `Gekopieerd van ${sourceUser.name}` : undefined,

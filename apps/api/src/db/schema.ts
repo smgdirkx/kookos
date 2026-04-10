@@ -30,6 +30,8 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").notNull().default(false),
   image: text("image"),
+  allowMeat: boolean("allow_meat").notNull().default(false),
+  allowFish: boolean("allow_fish").notNull().default(false),
   lastSeenSharedAt: timestamp("last_seen_shared_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -100,6 +102,8 @@ export const recipes = pgTable(
     sourceRecipeId: uuid("source_recipe_id"),
     notes: text("notes"),
 
+    hasMeat: boolean("has_meat").notNull().default(false),
+    hasFish: boolean("has_fish").notNull().default(false),
     isFavorite: boolean("is_favorite").notNull().default(true),
     searchVector: tsvector("search_vector"),
     createdAt: timestamp("created_at").notNull().defaultNow(),

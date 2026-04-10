@@ -8,6 +8,7 @@ import {
   LogOut,
   Plus,
   Settings,
+  Shield,
   ShoppingCart,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -168,17 +169,28 @@ export function Layout() {
                   <ShoppingCart size={16} />
                   <span>Boodschappenlijst</span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    navigate("/instellingen");
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <Settings size={16} />
+                  <span>Instellingen</span>
+                </button>
                 {user?.email.endsWith("@drkx.nl") && (
                   <button
                     type="button"
                     onClick={() => {
                       setMenuOpen(false);
-                      navigate("/instellingen");
+                      navigate("/admin");
                     }}
                     className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                   >
-                    <Settings size={16} />
-                    <span>Instellingen</span>
+                    <Shield size={16} />
+                    <span>Admin</span>
                   </button>
                 )}
                 <button

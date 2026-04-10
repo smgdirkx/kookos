@@ -6,10 +6,10 @@ ENV NODE_ENV=development
 COPY package.json package-lock.json turbo.json tsconfig.json ./
 COPY apps/api/package.json apps/api/tsconfig.json apps/api/
 COPY packages/shared/package.json packages/shared/tsconfig.json packages/shared/
-RUN npm ci
+RUN NODE_OPTIONS="--max-old-space-size=384" npm ci
 COPY apps/api/ apps/api/
 COPY packages/shared/ packages/shared/
-RUN npx turbo build --filter=@kookos/api
+RUN NODE_OPTIONS="--max-old-space-size=384" npx turbo build --filter=@kookos/api --concurrency=1
 
 FROM base AS runner
 WORKDIR /app

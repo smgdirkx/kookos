@@ -1,5 +1,5 @@
 import { copyCommunityRecipesSchema, searchCommunityRecipesSchema } from "@kookos/shared";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../db/index.js";
 import { recipeImages, recipeIngredients, recipes, recipeTags, users } from "../db/schema.js";
@@ -26,6 +26,13 @@ app.use("*", requireAuth);
 
 // List users with recipe counts (all users including current)
 app.get("/users", async (c) => {
+  const currentUser = c.get("user")!;
+
+  // Build diet-aware join condition
+  const joinConditions = [eq(recipes.userId, users.id)];
+  if (!currentUser.allowMeat) joinConditions.push(sql`${recipes.hasMeat} = false`);
+  if (!currentUser.allowFish) joinConditions.push(sql`${recipes.hasFish} = false`);
+
   const result = await db
     .select({
       id: users.id,
@@ -33,7 +40,7 @@ app.get("/users", async (c) => {
       recipeCount: sql<number>`count(${recipes.id})::int`,
     })
     .from(users)
-    .leftJoin(recipes, eq(recipes.userId, users.id))
+    .leftJoin(recipes, and(...joinConditions))
     .groupBy(users.id, users.name)
     .orderBy(sql`count(${recipes.id}) DESC`, users.name);
 
@@ -42,7 +49,8 @@ app.get("/users", async (c) => {
 
 // List / search community recipes
 app.get("/recipes", async (c) => {
-  const currentUserId = c.get("user")!.id;
+  const currentUser = c.get("user")!;
+  const currentUserId = currentUser.id;
   const parsed = searchCommunityRecipesSchema.safeParse({
     userId: c.req.query("userId"),
     query: c.req.query("q"),
@@ -58,6 +66,10 @@ app.get("/recipes", async (c) => {
   const imageBase = S3_PUBLIC_URL || "/images/kookos";
 
   let whereClause = userId ? sql`${recipes.userId} = ${userId}` : sql`TRUE`;
+
+  // Diet preference filters
+  if (!currentUser.allowMeat) whereClause = sql`${whereClause} AND ${recipes.hasMeat} = false`;
+  if (!currentUser.allowFish) whereClause = sql`${whereClause} AND ${recipes.hasFish} = false`;
 
   if (trimmedQuery) {
     const likePattern = `%${trimmedQuery}%`;
@@ -177,6 +189,8 @@ app.post("/copy", async (c) => {
         cuisine: source.cuisine,
         category: source.category,
         difficulty: source.difficulty,
+        hasMeat: source.hasMeat,
+        hasFish: source.hasFish,
         source: "community",
         sourceRecipeId: source.id,
         notes: sourceUser ? `Gekopieerd van ${sourceUser.name}` : undefined,

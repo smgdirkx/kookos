@@ -5,6 +5,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Layout } from "@/components/layout";
 import { useAuthStore } from "@/lib/auth";
 import { AddRecipePage } from "@/pages/add-recipe";
+import { AdminPage } from "@/pages/admin";
 import { CommunityRecipesPage } from "@/pages/community-recipes";
 import { ExternalRecipesPage } from "@/pages/external-recipes";
 import { LoginPage } from "@/pages/login";
@@ -59,11 +60,12 @@ createRoot(document.getElementById("root")!).render(
             <Route path="add-recipe/community" element={<CommunityRecipesPage />} />
             <Route path="add-recipe/groentenabonnement" element={<ExternalRecipesPage />} />
             <Route path="shared-recipes" element={<SharedRecipesPage />} />
+            <Route path="instellingen" element={<SettingsPage />} />
             <Route
-              path="instellingen"
+              path="admin"
               element={
                 <AdminRoute>
-                  <SettingsPage />
+                  <AdminPage />
                 </AdminRoute>
               }
             />

@@ -73,6 +73,16 @@ const recipeTool: Anthropic.Tool = {
           required: ["name"],
         },
       },
+      hasMeat: {
+        type: "boolean",
+        description:
+          "true ALLEEN als jouw UITEINDELIJKE versie van het recept daadwerkelijk vlees bevat (kip, rund, varken, lam, etc.). Als je vlees hebt vervangen door een vegetarisch alternatief, dan is hasMeat = false",
+      },
+      hasFish: {
+        type: "boolean",
+        description:
+          "true ALLEEN als jouw UITEINDELIJKE versie van het recept daadwerkelijk vis of zeevruchten bevat (zalm, garnalen, tonijn, etc.). Als je vis hebt vervangen door een alternatief, dan is hasFish = false",
+      },
       tags: {
         type: "array",
         items: {
@@ -109,7 +119,7 @@ const recipeTool: Anthropic.Tool = {
           "Maximaal 3 tags uit de vaste lijst. Kies alleen tags die echt van toepassing zijn. Niet taggen wat al via cuisine, category of difficulty wordt vastgelegd.",
       },
     },
-    required: ["title", "instructions", "ingredients"],
+    required: ["title", "instructions", "ingredients", "hasMeat", "hasFish"],
   },
 };
 
@@ -177,26 +187,49 @@ function getToolInput(message: Anthropic.Message): unknown {
   return toolUse.input;
 }
 
-const RECIPE_SYSTEM_PROMPT = `Je bent een recepten-expert. Analyseer het aangeboden recept en extraheer alle informatie.
+function buildRecipeSystemPrompt(opts: { allowMeat: boolean; allowFish: boolean }): string {
+  const dietRules: string[] = [];
+
+  if (!opts.allowMeat && !opts.allowFish) {
+    dietRules.push(`VEGETARISCH KOKEN — STRIKTE REGEL:
+Er wordt UITSLUITEND vegetarisch gekookt. Vlees en vis/zeevruchten mogen NOOIT voorkomen in het resultaat — niet als ingrediënt, niet als suggestie, niet als serveertip, niet als variatie. Als het originele recept vlees of vis bevat of suggereert, VERVANG dit altijd door een passend vegetarisch alternatief. Dit geldt voor ALLE onderdelen: ingrediëntenlijst, bereidingswijze, tips, variaties en serveersuggesties.`);
+  } else if (!opts.allowMeat) {
+    dietRules.push(`GEEN VLEES — STRIKTE REGEL:
+Er wordt GEEN vlees gebruikt (kip, rund, varken, lam, etc.). Vlees mag NOOIT voorkomen in het resultaat. Vis en zeevruchten zijn WEL toegestaan. Als het originele recept vlees bevat, VERVANG dit door een passend alternatief (vis, vegetarisch of vegan). Dit geldt voor ALLE onderdelen.`);
+  } else if (!opts.allowFish) {
+    dietRules.push(`GEEN VIS — STRIKTE REGEL:
+Er wordt GEEN vis of zeevruchten gebruikt (zalm, garnalen, tonijn, etc.). Vis mag NOOIT voorkomen in het resultaat. Vlees is WEL toegestaan. Als het originele recept vis bevat, VERVANG dit door een passend alternatief (vlees of vegetarisch). Dit geldt voor ALLE onderdelen.`);
+  } else {
+    dietRules.push(
+      `GEEN DIEETBEPERKINGEN: Vlees en vis zijn beide toegestaan. Neem het recept over zoals het is.`,
+    );
+  }
+
+  return `Je bent een recepten-expert. Analyseer het aangeboden recept en extraheer alle informatie.
 Gebruik Nederlandse taal voor alle tekst. Gebruik altijd de save_recipe tool om het resultaat terug te geven.
 
-VEGETARISCH KOKEN — STRIKTE REGEL:
-Er wordt UITSLUITEND vegetarisch gekookt. Vlees en vis/zeevruchten mogen NOOIT voorkomen in het resultaat — niet als ingrediënt, niet als suggestie, niet als serveertip, niet als variatie. Als het originele recept vlees of vis bevat of suggereert, VERVANG dit altijd door een passend vegetarisch alternatief. Dit geldt voor ALLE onderdelen: ingrediëntenlijst, bereidingswijze, tips, variaties en serveersuggesties.
+${dietRules[0]}
 
-BEREIDINGSWIJZE: Neem de VOLLEDIGE bereidingstekst over — inclusief alle secties zoals tips, variaties, serveersuggesties, opmerkingen en voedingsinfo. Er mag GEEN informatie verloren gaan (behalve verwijzingen naar vlees/vis — die worden vervangen door vega alternatieven). Als het origineel aparte secties heeft (bijv. "Variaties", "Tips"), behoud deze als duidelijke koppen in de tekst.
+CLASSIFICATIE VLEES/VIS — VERPLICHT:
+Beoordeel ALTIJD of jouw UITEINDELIJKE versie van het recept vlees of vis bevat en zet hasMeat/hasFish correct:
+- hasMeat = true ALLEEN als het recept dat je teruggeeft daadwerkelijk vlees bevat (kip, rund, varken, lam, gehakt, spek, etc.)
+- hasFish = true ALLEEN als het recept dat je teruggeeft daadwerkelijk vis/zeevruchten bevat (zalm, garnalen, tonijn, kabeljauw, etc.)
+- Als je vlees/vis hebt VERVANGEN door een vegetarisch alternatief, dan is hasMeat/hasFish = false
+
+BEREIDINGSWIJZE: Neem de VOLLEDIGE bereidingstekst over — inclusief alle secties zoals tips, variaties, serveersuggesties, opmerkingen en voedingsinfo. Er mag GEEN informatie verloren gaan${!opts.allowMeat || !opts.allowFish ? " (behalve verwijzingen naar niet-toegestane ingrediënten — die worden vervangen)" : ""}. Als het origineel aparte secties heeft (bijv. "Variaties", "Tips"), behoud deze als duidelijke koppen in de tekst.
 Categoriseer elk ingrediënt op basis van de rol in het gerecht: hoofdgroenten (de groenten waar het gerecht om draait), aromaten (smaakmakers zoals ui, knoflook, kruiden), basis (pasta, rijst, aardappel), eiwitten (tofu, linzen, eieren, kaas), overig (olie, sauzen, bouillon).
 Bepaal ook de moeilijkheidsgraad: makkelijk (weinig stappen, basistechnieken), gemiddeld (meerdere technieken, timing belangrijk), moeilijk (geavanceerde technieken, veel stappen).
 
 SUGGESTIES:
-- Scan de VOLLEDIGE tekst — titel, beschrijving, ingrediëntenlijst, bereidingsstappen, tips, en serveersuggesties — op ALLE genoemde etenswaren/ingrediënten. ELKE eetbare suggestie die ergens in de tekst wordt genoemd MOET als apart ingrediënt in de ingrediëntenlijst komen met isSuggested=true, behalve als het niet-vegetarisch is. Sla er GEEN ENKELE over. Als er meerdere alternatieven worden gesuggereerd, voeg ze ALLEMAAL toe als aparte ingrediënten.
-- NOOIT vlees of vis suggereren. Als het origineel vlees/vis suggereert als variatie of serveertip, vervang dit door een vegetarisch alternatief.
-- VERPLICHT: Controleer of het recept een basis (koolhydraat) en een eiwit bevat. Kijk in ZOWEL de ingrediëntenlijst als de bereidingstekst. Als een van deze categorieën volledig ontbreekt, MOET je minstens één passend vegetarisch ingrediënt suggereren met isSuggested=true. Een compleet gerecht heeft altijd een koolhydraat én een eiwitbron — sla dit NOOIT over.
+- Scan de VOLLEDIGE tekst — titel, beschrijving, ingrediëntenlijst, bereidingsstappen, tips, en serveersuggesties — op ALLE genoemde etenswaren/ingrediënten. ELKE eetbare suggestie die ergens in de tekst wordt genoemd MOET als apart ingrediënt in de ingrediëntenlijst komen met isSuggested=true${!opts.allowMeat || !opts.allowFish ? ", behalve als het een niet-toegestaan ingrediënt is" : ""}. Sla er GEEN ENKELE over. Als er meerdere alternatieven worden gesuggereerd, voeg ze ALLEMAAL toe als aparte ingrediënten.${!opts.allowMeat && !opts.allowFish ? "\n- NOOIT vlees of vis suggereren. Als het origineel vlees/vis suggereert als variatie of serveertip, vervang dit door een vegetarisch alternatief." : !opts.allowMeat ? "\n- NOOIT vlees suggereren. Als het origineel vlees suggereert als variatie of serveertip, vervang dit door een alternatief." : !opts.allowFish ? "\n- NOOIT vis/zeevruchten suggereren. Als het origineel vis suggereert als variatie of serveertip, vervang dit door een alternatief." : ""}
+- VERPLICHT: Controleer of het recept een basis (koolhydraat) en een eiwit bevat. Kijk in ZOWEL de ingrediëntenlijst als de bereidingstekst. Als een van deze categorieën volledig ontbreekt, MOET je minstens één passend ingrediënt suggereren met isSuggested=true. Een compleet gerecht heeft altijd een koolhydraat én een eiwitbron — sla dit NOOIT over.
 - Ingrediënten die WEL expliciet in de originele ingrediëntenlijst staan krijgen isSuggested=false (of laat het veld weg).
 
 TAGS — STRIKTE REGELS:
 - Kies maximaal 3 tags uit de vaste lijst in de tool. Minder is beter — tag alleen wat echt relevant is.
 - GEEN tags die overlappen met bestaande velden: cuisine dekt de keuken, category dekt het gerecht-type (pasta, soep, etc.), difficulty dekt de moeilijkheidsgraad, en bereidingstijd staat apart.
 - Wees selectief: een simpele pasta hoeft geen 3 tags. Als er niets bijzonders is, geef 0 of 1 tag.`;
+}
 
 // ── Helpers (recipe saving) ──
 
@@ -239,12 +272,23 @@ async function saveRecipeFromAi(
 
   const { ingredients, tags: aiTags, ...recipeData } = parsed.data;
 
+  // Extract hasMeat/hasFish from AI result (not in zod schema, comes from tool output)
+  const hasMeat = (aiResult as Record<string, unknown>).hasMeat === true;
+  const hasFish = (aiResult as Record<string, unknown>).hasFish === true;
+
   // Merge AI-generated tags with user-supplied extra tags (deduplicated)
   const tagNames = [...new Set([...(aiTags ?? []), ...(opts.extraTags ?? [])])];
 
   const [recipe] = await db
     .insert(recipes)
-    .values({ ...recipeData, source: opts.source, sourceUrl: opts.sourceUrl, userId })
+    .values({
+      ...recipeData,
+      source: opts.source,
+      sourceUrl: opts.sourceUrl,
+      userId,
+      hasMeat,
+      hasFish,
+    })
     .returning();
 
   // Insert ingredients
@@ -332,9 +376,14 @@ app.post("/scan", async (c) => {
   const parsed = scanRecipeSchema.safeParse(body);
   if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
 
+  const systemPrompt = buildRecipeSystemPrompt({
+    allowMeat: user.allowMeat ?? false,
+    allowFish: user.allowFish ?? false,
+  });
+
   const message = await createMessage({
     max_tokens: 4096,
-    system: RECIPE_SYSTEM_PROMPT,
+    system: systemPrompt,
     tools: [recipeTool],
     tool_choice: { type: "tool", name: "save_recipe" },
     messages: [
@@ -382,6 +431,7 @@ app.post("/import", async (c) => {
   if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
 
   // Check if another user already imported this URL — copy instead of re-running AI
+  // Only reuse if the existing recipe is compatible with the current user's diet prefs
   const existingRecipe = await db.query.recipes.findFirst({
     where: and(eq(recipes.sourceUrl, parsed.data.url), ne(recipes.userId, user.id)),
     with: {
@@ -391,7 +441,12 @@ app.post("/import", async (c) => {
     },
   });
 
-  if (existingRecipe) {
+  const canReuse =
+    existingRecipe &&
+    (user.allowMeat || !existingRecipe.hasMeat) &&
+    (user.allowFish || !existingRecipe.hasFish);
+
+  if (existingRecipe && canReuse) {
     const sourceUser = await db.query.users.findFirst({
       where: eq(users.id, existingRecipe.userId),
     });
@@ -412,6 +467,8 @@ app.post("/import", async (c) => {
         source: existingRecipe.source,
         sourceUrl: existingRecipe.sourceUrl,
         sourceRecipeId: existingRecipe.id,
+        hasMeat: existingRecipe.hasMeat,
+        hasFish: existingRecipe.hasFish,
         notes: sourceUser ? `Gekopieerd van ${sourceUser.name}` : undefined,
         isFavorite: true,
       })
@@ -478,9 +535,14 @@ app.post("/import", async (c) => {
     promptContent = `Extraheer het recept uit deze webpagina.\n\nURL: ${parsed.data.url}\n\nHTML:\n${cleaned}`;
   }
 
+  const systemPrompt = buildRecipeSystemPrompt({
+    allowMeat: user.allowMeat ?? false,
+    allowFish: user.allowFish ?? false,
+  });
+
   const message = await createMessage({
     max_tokens: 4096,
-    system: RECIPE_SYSTEM_PROMPT,
+    system: systemPrompt,
     tools: [recipeTool],
     tool_choice: { type: "tool", name: "save_recipe" },
     messages: [
@@ -515,9 +577,14 @@ app.post("/paste", async (c) => {
   const parsed = pasteRecipeSchema.safeParse(body);
   if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
 
+  const systemPrompt = buildRecipeSystemPrompt({
+    allowMeat: user.allowMeat ?? false,
+    allowFish: user.allowFish ?? false,
+  });
+
   const message = await createMessage({
     max_tokens: 4096,
-    system: RECIPE_SYSTEM_PROMPT,
+    system: systemPrompt,
     tools: [recipeTool],
     tool_choice: { type: "tool", name: "save_recipe" },
     messages: [
@@ -550,13 +617,20 @@ async function preFilterRecipes(
     maxTimeMinutes?: number;
     difficulty?: string;
   },
+  dietPrefs: { allowMeat: boolean; allowFish: boolean },
 ) {
   const { availableIngredients, maxTimeMinutes, difficulty } = data;
   const tsQueries = availableIngredients.map((ing) => sql`plainto_tsquery('dutch', ${ing})`);
   const combinedTsQuery = sql.join(tsQueries, sql` || `);
 
-  // Build preference filters for time and difficulty
+  // Build preference filters for time, difficulty, and diet
   const prefFilters = [];
+  if (!dietPrefs.allowMeat) {
+    prefFilters.push(sql`${recipes.hasMeat} = false`);
+  }
+  if (!dietPrefs.allowFish) {
+    prefFilters.push(sql`${recipes.hasFish} = false`);
+  }
   if (maxTimeMinutes && maxTimeMinutes > 0) {
     prefFilters.push(
       sql`(COALESCE(${recipes.prepTimeMinutes}, 0) + COALESCE(${recipes.cookTimeMinutes}, 0) <= ${maxTimeMinutes} OR (${recipes.prepTimeMinutes} IS NULL AND ${recipes.cookTimeMinutes} IS NULL))`,
@@ -624,7 +698,10 @@ app.post("/meal-plan/check", async (c) => {
   const parsed = generateMealPlanSchema.safeParse(body);
   if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
 
-  const { warnings } = await preFilterRecipes(user.id, parsed.data);
+  const { warnings } = await preFilterRecipes(user.id, parsed.data, {
+    allowMeat: user.allowMeat ?? false,
+    allowFish: user.allowFish ?? false,
+  });
   return c.json({ warnings });
 });
 
@@ -635,7 +712,10 @@ app.post("/meal-plan", async (c) => {
   const parsed = generateMealPlanSchema.safeParse(body);
   if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
 
-  const { userRecipes, matchedIds, warnings } = await preFilterRecipes(user.id, parsed.data);
+  const { userRecipes, matchedIds, warnings } = await preFilterRecipes(user.id, parsed.data, {
+    allowMeat: user.allowMeat ?? false,
+    allowFish: user.allowFish ?? false,
+  });
 
   const recipeSummaries = userRecipes.map((r) => ({
     id: r.id,
@@ -660,10 +740,25 @@ app.post("/meal-plan", async (c) => {
     recipeMetaMap.set(r.id, { totalTimeMinutes: totalTime, difficulty: r.difficulty ?? undefined });
   }
 
+  // Build diet description for meal plan prompt
+  const allowMeat = user.allowMeat ?? false;
+  const allowFish = user.allowFish ?? false;
+  let dietLine: string;
+  if (!allowMeat && !allowFish) {
+    dietLine =
+      "BELANGRIJK: Er wordt uitsluitend vegetarisch gekookt. Kies NOOIT recepten met vlees of vis.";
+  } else if (!allowMeat) {
+    dietLine = "BELANGRIJK: Er wordt geen vlees gegeten. Vis is wel toegestaan.";
+  } else if (!allowFish) {
+    dietLine = "BELANGRIJK: Er wordt geen vis gegeten. Vlees is wel toegestaan.";
+  } else {
+    dietLine = "Vlees en vis zijn beide toegestaan.";
+  }
+
   const message = await createMessage({
     max_tokens: 4096,
-    system: `Je bent een weekmenu-planner voor een VEGETARISCH huishouden. Maak een weekmenu met ALLEEN avondeten (geen lunch).
-BELANGRIJK: Er wordt uitsluitend vegetarisch gekookt. Kies NOOIT recepten met vlees of vis.
+    system: `Je bent een weekmenu-planner. Maak een weekmenu met ALLEEN avondeten (geen lunch).
+${dietLine}
 Je mag UITSLUITEND recepten kiezen uit de lijst "Bestaande recepten" die de gebruiker meestuurt. Verzin NOOIT zelf recepten.
 Gebruik altijd de exacte "id" van het recept als recipeId in je antwoord.
 Als er niet genoeg recepten zijn, herhaal dan recepten of gebruik minder dagen.

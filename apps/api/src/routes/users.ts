@@ -1,4 +1,5 @@
 import { generateRandomString, hashPassword } from "better-auth/crypto";
+import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { db } from "../db/index.js";
@@ -12,6 +13,75 @@ const createUserSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(6),
+});
+
+const updateProfileSchema = z.object({
+  name: z.string().min(1).optional(),
+  email: z.string().email().optional(),
+  password: z.string().min(6).optional(),
+  allowMeat: z.boolean().optional(),
+  allowFish: z.boolean().optional(),
+});
+
+// GET /api/users/me — get own profile including diet preferences
+app.get("/me", requireAuth, async (c) => {
+  const currentUser = c.get("user")!;
+  const user = await db.query.users.findFirst({
+    where: (u, { eq: e }) => e(u.id, currentUser.id),
+    columns: { id: true, name: true, email: true, allowMeat: true, allowFish: true },
+  });
+  if (!user) return c.json({ error: "Not found" }, 404);
+  return c.json(user);
+});
+
+// PATCH /api/users/me — update own profile
+app.patch("/me", requireAuth, async (c) => {
+  const currentUser = c.get("user")!;
+  const body = await c.req.json();
+  const parsed = updateProfileSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "Ongeldige invoer", details: parsed.error.flatten() }, 400);
+  }
+
+  const { name, email, password, allowMeat, allowFish } = parsed.data;
+
+  if (email && email !== currentUser.email) {
+    const existing = await db.query.users.findFirst({
+      where: (u, { eq: e }) => e(u.email, email),
+    });
+    if (existing) {
+      return c.json({ error: "Er bestaat al een gebruiker met dit e-mailadres" }, 409);
+    }
+  }
+
+  const now = new Date();
+
+  // Update user table
+  const userUpdate: Record<string, unknown> = { updatedAt: now };
+  if (name) userUpdate.name = name;
+  if (email) userUpdate.email = email;
+  if (allowMeat !== undefined) userUpdate.allowMeat = allowMeat;
+  if (allowFish !== undefined) userUpdate.allowFish = allowFish;
+
+  if (Object.keys(userUpdate).length > 1) {
+    await db.update(schema.users).set(userUpdate).where(eq(schema.users.id, currentUser.id));
+  }
+
+  // Update password in accounts table
+  if (password) {
+    const hashedPassword = await hashPassword(password);
+    await db
+      .update(schema.accounts)
+      .set({ password: hashedPassword, updatedAt: now })
+      .where(eq(schema.accounts.userId, currentUser.id));
+  }
+
+  const updated = await db.query.users.findFirst({
+    where: (u, { eq: e }) => e(u.id, currentUser.id),
+    columns: { id: true, name: true, email: true, allowMeat: true, allowFish: true },
+  });
+
+  return c.json(updated!);
 });
 
 // POST /api/users — create a new user (only @drkx.nl admins)

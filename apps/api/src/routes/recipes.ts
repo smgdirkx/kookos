@@ -43,10 +43,15 @@ app.get("/", async (c) => {
   const category = c.req.query("category");
   const difficulty = c.req.query("difficulty");
   const tag = c.req.query("tag");
+  const shared = c.req.query("shared");
   const maxTime = c.req.query("maxTime");
   const limit = Math.min(Number(c.req.query("limit")) || PAGE_SIZE, 50);
 
   const conditions = [eq(recipes.userId, user.id)];
+
+  // Diet preference filters
+  if (!user.allowMeat) conditions.push(eq(recipes.hasMeat, false));
+  if (!user.allowFish) conditions.push(eq(recipes.hasFish, false));
 
   // Full-text search: tsvector with prefix matching for partial words,
   // fallback to ILIKE on title when tsvector misses
@@ -132,6 +137,16 @@ app.get("/", async (c) => {
     );
   }
 
+  // Shared filter: only recipes that have been shared (heart)
+  if (shared === "true") {
+    conditions.push(
+      sql`EXISTS (
+        SELECT 1 FROM recipe_shares rs
+        WHERE rs.recipe_id = ${recipes.id} AND rs.user_id = ${user.id}
+      )`,
+    );
+  }
+
   // Cursor pagination: "createdAt|id" — fetch rows older than cursor
   if (cursor) {
     const sep = cursor.indexOf("|");
@@ -148,12 +163,15 @@ app.get("/", async (c) => {
     }
   }
 
-  // Total count of all user's recipes (unfiltered) — only on first page
+  // Total count of user's recipes (with diet filters applied) — only on first page
+  const dietConditions = [eq(recipes.userId, user.id)];
+  if (!user.allowMeat) dietConditions.push(eq(recipes.hasMeat, false));
+  if (!user.allowFish) dietConditions.push(eq(recipes.hasFish, false));
   const totalCountPromise = !cursor
     ? db
         .select({ count: sql<number>`COUNT(*)` })
         .from(recipes)
-        .where(eq(recipes.userId, user.id))
+        .where(and(...dietConditions))
         .then((rows) => Number(rows[0].count))
     : null;
 

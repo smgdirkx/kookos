@@ -5,6 +5,8 @@ export type AppUser = {
   name: string;
   email: string;
   image?: string | null;
+  allowMeat?: boolean;
+  allowFish?: boolean;
 };
 
 export interface AppEnv extends Env {

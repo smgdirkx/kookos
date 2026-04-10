@@ -5,6 +5,7 @@ import {
   BookOpen,
   ChefHat,
   Clock,
+  Heart,
   Loader2,
   Plus,
   Search,
@@ -72,6 +73,7 @@ type StoredFilters = {
   difficulty?: string[];
   tag?: string[];
   maxTime?: number;
+  shared?: boolean;
   filtersOpen?: boolean;
 };
 
@@ -97,6 +99,7 @@ export function RecipesPage() {
     () => new Set(stored.category ?? []),
   );
   const [selectedTags, setSelectedTags] = useState<Set<string>>(() => new Set(stored.tag ?? []));
+  const [sharedOnly, setSharedOnly] = useState(stored.shared ?? false);
   const [selectedDifficulty, setSelectedDifficulty] = useState<Set<string>>(
     () => new Set(stored.difficulty ?? []),
   );
@@ -113,6 +116,7 @@ export function RecipesPage() {
     if (selectedDifficulty.size > 0) filters.difficulty = [...selectedDifficulty];
     if (selectedTags.size > 0) filters.tag = [...selectedTags];
     if (maxTime !== null) filters.maxTime = maxTime;
+    if (sharedOnly) filters.shared = true;
     if (filtersOpen) filters.filtersOpen = true;
     localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(filters));
   }, [
@@ -122,6 +126,7 @@ export function RecipesPage() {
     selectedDifficulty,
     selectedTags,
     maxTime,
+    sharedOnly,
     filtersOpen,
   ]);
 
@@ -142,6 +147,7 @@ export function RecipesPage() {
       if (selectedDifficulty.size > 0) params.set("difficulty", [...selectedDifficulty].join(","));
       if (selectedTags.size > 0) params.set("tag", [...selectedTags].join(","));
       if (maxTime !== null) params.set("maxTime", String(maxTime));
+      if (sharedOnly) params.set("shared", "true");
       if (cursor) params.set("cursor", cursor);
       return params.toString();
     },
@@ -152,6 +158,7 @@ export function RecipesPage() {
       selectedDifficulty,
       selectedTags,
       maxTime,
+      sharedOnly,
     ],
   );
 
@@ -172,6 +179,7 @@ export function RecipesPage() {
         [...selectedDifficulty].sort().join(),
         [...selectedTags].sort().join(),
         maxTime,
+        sharedOnly,
       ],
       queryFn: ({ pageParam }) => {
         const params = buildParams(pageParam as string | undefined);
@@ -206,6 +214,7 @@ export function RecipesPage() {
 
   const activeFilterCount =
     (maxTime !== null ? 1 : 0) +
+    (sharedOnly ? 1 : 0) +
     selectedCuisines.size +
     selectedCategories.size +
     selectedTags.size +
@@ -222,6 +231,7 @@ export function RecipesPage() {
     setSelectedCategories(new Set());
     setSelectedTags(new Set());
     setSelectedDifficulty(new Set());
+    setSharedOnly(false);
     setFiltersOpen(false);
   }
 
@@ -286,6 +296,17 @@ export function RecipesPage() {
                   Wis filters
                 </button>
               )}
+            </div>
+
+            <div>
+              <div className="flex flex-wrap gap-1.5">
+                <FilterChip
+                  label="Gedeeld"
+                  selected={sharedOnly}
+                  onClick={() => setSharedOnly(!sharedOnly)}
+                  icon={Heart}
+                />
+              </div>
             </div>
 
             <div>
