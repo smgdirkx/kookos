@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Check,
   CheckSquare,
   ChevronLeft,
   ChevronRight,
@@ -31,6 +32,7 @@ type CommunityRecipe = {
   cuisine: string | null;
   userName: string;
   imageUrl: string | null;
+  isOwned: boolean;
 };
 
 type RecipeDetail = {
@@ -441,16 +443,23 @@ export function CommunityRecipesPage() {
               <div
                 key={recipe.id}
                 className={`flex bg-white rounded-xl border overflow-hidden transition-colors ${
-                  selected.has(recipe.id) ? "border-orange-400 bg-orange-50/30" : "border-gray-200"
+                  recipe.isOwned
+                    ? "border-gray-200 opacity-60"
+                    : selected.has(recipe.id)
+                      ? "border-orange-400 bg-orange-50/30"
+                      : "border-gray-200"
                 }`}
               >
                 {/* Checkbox: toggles selection */}
                 <button
                   type="button"
-                  onClick={() => toggleSelect(recipe.id)}
-                  className="flex items-center justify-center w-12 flex-shrink-0 border-r border-gray-100 hover:bg-gray-50 transition-colors"
+                  onClick={() => !recipe.isOwned && toggleSelect(recipe.id)}
+                  disabled={recipe.isOwned}
+                  className="flex items-center justify-center w-12 flex-shrink-0 border-r border-gray-100 hover:bg-gray-50 transition-colors disabled:hover:bg-transparent"
                 >
-                  {selected.has(recipe.id) ? (
+                  {recipe.isOwned ? (
+                    <Check className="w-5 h-5 text-green-500" />
+                  ) : selected.has(recipe.id) ? (
                     <CheckSquare className="w-5 h-5 text-orange-500" />
                   ) : (
                     <Square className="w-5 h-5 text-gray-300" />
@@ -470,7 +479,10 @@ export function CommunityRecipesPage() {
                     {recipe.category && (
                       <p className="text-xs text-gray-400 mt-0.5">{recipe.category}</p>
                     )}
-                    {recipe.description && (
+                    {recipe.isOwned && (
+                      <p className="text-xs text-green-600 mt-0.5">Al in je recepten</p>
+                    )}
+                    {!recipe.isOwned && recipe.description && (
                       <p className="text-xs text-gray-500 mt-1 line-clamp-2">
                         {recipe.description}
                       </p>

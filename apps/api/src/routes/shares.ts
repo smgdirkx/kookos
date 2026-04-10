@@ -118,6 +118,7 @@ app.get("/status/:recipeId", async (c) => {
 
 // List all shared recipes (from all users, for the feed)
 app.get("/", async (c) => {
+  const currentUserId = c.get("user")!.id;
   const parsed = searchSharedRecipesSchema.safeParse({
     query: c.req.query("q"),
     page: c.req.query("page"),
@@ -158,6 +159,14 @@ app.get("/", async (c) => {
         FROM ${recipeImages}
         WHERE ${recipeImages.recipeId} = ${recipes.id} AND ${recipeImages.isPrimary} = true
         LIMIT 1
+      )`,
+      isOwned: sql<boolean>`(
+        ${recipes.userId} = ${currentUserId}
+        OR EXISTS (
+          SELECT 1 FROM ${recipes} r2
+          WHERE r2.user_id = ${currentUserId}
+          AND r2.source_recipe_id = ${recipes.id}
+        )
       )`,
       shareComment: recipeShares.comment,
       sharedAt: recipeShares.createdAt,

@@ -36,13 +36,14 @@ app.get("/users", async (c) => {
     .leftJoin(recipes, eq(recipes.userId, users.id))
     .groupBy(users.id, users.name)
     .having(sql`count(${recipes.id}) > 0`)
-    .orderBy(users.name);
+    .orderBy(sql`count(${recipes.id}) DESC`, users.name);
 
   return c.json(result);
 });
 
 // List / search community recipes
 app.get("/recipes", async (c) => {
+  const currentUserId = c.get("user")!.id;
   const parsed = searchCommunityRecipesSchema.safeParse({
     userId: c.req.query("userId"),
     query: c.req.query("q"),
@@ -85,6 +86,14 @@ app.get("/recipes", async (c) => {
         FROM ${recipeImages}
         WHERE ${recipeImages.recipeId} = ${recipes.id} AND ${recipeImages.isPrimary} = true
         LIMIT 1
+      )`,
+      isOwned: sql<boolean>`(
+        ${recipes.userId} = ${currentUserId}
+        OR EXISTS (
+          SELECT 1 FROM ${recipes} r2
+          WHERE r2.user_id = ${currentUserId}
+          AND r2.source_recipe_id = ${recipes.id}
+        )
       )`,
     })
     .from(recipes)

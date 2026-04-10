@@ -7,11 +7,11 @@ import {
   pasteRecipeSchema,
   scanRecipeSchema,
 } from "@kookos/shared";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../db/index.js";
-import { recipeImages, recipeIngredients, recipes, recipeTags, tags } from "../db/schema.js";
-import { uploadBase64Image, uploadExternalImage } from "../image.js";
+import { recipeImages, recipeIngredients, recipes, recipeTags, tags, users } from "../db/schema.js";
+import { copyS3Image, uploadBase64Image, uploadExternalImage } from "../image.js";
 import { requireAuth } from "../middleware.js";
 import { cleanHtml, extractJsonLd, fetchPage } from "../services/fetch-page.js";
 import type { AppEnv } from "../types.js";
@@ -380,6 +380,83 @@ app.post("/import", async (c) => {
   const body = await c.req.json();
   const parsed = importRecipeSchema.safeParse(body);
   if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
+
+  // Check if another user already imported this URL — copy instead of re-running AI
+  const existingRecipe = await db.query.recipes.findFirst({
+    where: and(eq(recipes.sourceUrl, parsed.data.url), ne(recipes.userId, user.id)),
+    with: {
+      ingredients: true,
+      images: true,
+      recipeTags: { with: { tag: true } },
+    },
+  });
+
+  if (existingRecipe) {
+    const sourceUser = await db.query.users.findFirst({
+      where: eq(users.id, existingRecipe.userId),
+    });
+
+    const [newRecipe] = await db
+      .insert(recipes)
+      .values({
+        userId: user.id,
+        title: existingRecipe.title,
+        description: existingRecipe.description,
+        instructions: existingRecipe.instructions,
+        servings: existingRecipe.servings,
+        prepTimeMinutes: existingRecipe.prepTimeMinutes,
+        cookTimeMinutes: existingRecipe.cookTimeMinutes,
+        cuisine: existingRecipe.cuisine,
+        category: existingRecipe.category,
+        difficulty: existingRecipe.difficulty,
+        source: existingRecipe.source,
+        sourceUrl: existingRecipe.sourceUrl,
+        sourceRecipeId: existingRecipe.id,
+        notes: sourceUser ? `Gekopieerd van ${sourceUser.name}` : undefined,
+        isFavorite: true,
+      })
+      .returning();
+
+    if (existingRecipe.ingredients.length) {
+      await db.insert(recipeIngredients).values(
+        existingRecipe.ingredients.map((ing) => ({
+          recipeId: newRecipe.id,
+          name: ing.name,
+          amount: ing.amount,
+          unit: ing.unit,
+          category: ing.category,
+          isOptional: ing.isOptional,
+          isSuggested: ing.isSuggested,
+          sortOrder: ing.sortOrder,
+        })),
+      );
+    }
+
+    for (const img of existingRecipe.images) {
+      const newKey = await copyS3Image(img.url, newRecipe.id);
+      if (newKey) {
+        await db.insert(recipeImages).values({
+          recipeId: newRecipe.id,
+          url: newKey,
+          isPrimary: img.isPrimary,
+          caption: img.caption,
+        });
+      }
+    }
+
+    for (const rt of existingRecipe.recipeTags) {
+      if (rt.tag) {
+        await db.insert(recipeTags).values({ recipeId: newRecipe.id, tagId: rt.tag.id });
+      }
+    }
+
+    await db.update(recipes).set({ updatedAt: new Date() }).where(eq(recipes.id, newRecipe.id));
+
+    console.log(
+      `[ai:import] Copied recipe from user ${sourceUser?.name ?? existingRecipe.userId} instead of AI`,
+    );
+    return c.json({ id: newRecipe.id }, 201);
+  }
 
   const html = await fetchPage(parsed.data.url);
 
