@@ -35,7 +35,6 @@ app.get("/users", async (c) => {
     .from(users)
     .leftJoin(recipes, eq(recipes.userId, users.id))
     .groupBy(users.id, users.name)
-    .having(sql`count(${recipes.id}) > 0`)
     .orderBy(sql`count(${recipes.id}) DESC`, users.name);
 
   return c.json(result);
