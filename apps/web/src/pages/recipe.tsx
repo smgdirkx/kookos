@@ -1285,7 +1285,20 @@ export function RecipePage() {
         </div>
 
         {comments.length === 0 && !editingId && (
-          <p className="text-sm text-gray-400">Nog geen opmerkingen</p>
+          <div className="flex flex-col items-center gap-3 py-6 px-4 rounded-xl border-2 border-dashed border-gray-200 text-gray-400">
+            <MessageCircle size={28} />
+            <p className="text-sm">Tips, variaties of notities bij dit recept</p>
+            <button
+              type="button"
+              onClick={() => {
+                setNewComment("");
+                setEditingId("new");
+              }}
+              className="mt-1 px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors"
+            >
+              Opmerking toevoegen
+            </button>
+          </div>
         )}
 
         <div className="space-y-2">

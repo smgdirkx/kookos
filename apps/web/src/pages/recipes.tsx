@@ -231,7 +231,7 @@ export function RecipesPage() {
   return (
     <div>
       <PageHeader
-        title="Recepten"
+        title="Mijn recepten"
         action={
           <LinkButton to="/add-recipe" variant="cta" size="sm" icon={Plus}>
             Toevoegen

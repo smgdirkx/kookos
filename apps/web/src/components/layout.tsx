@@ -15,24 +15,20 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth";
 
-const leftTabs: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = [
-  { to: "/", label: "Recept", icon: BookOpen, end: true },
-  { to: "/meal-plans", label: "Menu", icon: CalendarDays },
+const leftTabs: { to: string; icon: LucideIcon; end?: boolean }[] = [
+  { to: "/", icon: BookOpen, end: true },
+  { to: "/meal-plans", icon: CalendarDays },
 ];
 
-const rightTabs: { to: string; label: string; icon: LucideIcon }[] = [
-  { to: "/shared-recipes", label: "Aanbevolen", icon: Heart },
-];
+const rightTabs: { to: string; icon: LucideIcon }[] = [{ to: "/shared-recipes", icon: Heart }];
 
 function TabLink({
   to,
-  label,
   icon: Icon,
   end,
   badge,
 }: {
   to: string;
-  label: string;
   icon: LucideIcon;
   end?: boolean;
   badge?: number;
@@ -42,23 +38,20 @@ function TabLink({
       to={to}
       end={end}
       className={({ isActive }: { isActive: boolean }) =>
-        `flex flex-col items-center py-2 px-3 text-xs transition-colors ${
+        `flex flex-col items-center py-3.5 px-3 transition-colors ${
           isActive ? "text-primary" : "text-gray-400"
         }`
       }
     >
       {({ isActive }: { isActive: boolean }) => (
-        <>
-          <span className="relative">
-            <Icon size={22} strokeWidth={isActive ? 2.5 : 2} className="mb-0.5" />
-            {badge != null && badge > 0 && (
-              <span className="absolute -top-1.5 -right-2.5 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-4 h-4 flex items-center justify-center px-1">
-                {badge > 99 ? "99+" : badge}
-              </span>
-            )}
-          </span>
-          <span className={isActive ? "font-medium" : ""}>{label}</span>
-        </>
+        <span className="relative">
+          <Icon size={26} strokeWidth={isActive ? 2.5 : 2} />
+          {badge != null && badge > 0 && (
+            <span className="absolute -top-1.5 -right-2.5 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-4 h-4 flex items-center justify-center px-1">
+              {badge > 99 ? "99+" : badge}
+            </span>
+          )}
+        </span>
       )}
     </NavLink>
   );
@@ -125,14 +118,14 @@ export function Layout() {
           <NavLink
             to="/add-recipe"
             className={({ isActive }: { isActive: boolean }) =>
-              `absolute left-1/2 -translate-x-1/2 -top-1 w-11 h-11 rounded-full flex items-center justify-center shadow-md transition-all ${
+              `absolute left-1/2 -translate-x-1/2 -top-2 w-12 h-12 rounded-full flex items-center justify-center shadow-md transition-all ${
                 isActive
                   ? "bg-cta text-white scale-105"
                   : "bg-cta text-white hover:bg-cta-dark active:scale-95"
               }`
             }
           >
-            <Plus size={22} strokeWidth={2.5} />
+            <Plus size={24} strokeWidth={2.5} />
           </NavLink>
 
           {/* Spacer for the FAB */}
@@ -150,12 +143,11 @@ export function Layout() {
             <button
               type="button"
               onClick={() => setMenuOpen((v) => !v)}
-              className={`flex flex-col items-center py-2 px-3 text-xs transition-colors ${
+              className={`flex flex-col items-center py-3.5 px-3 transition-colors ${
                 menuOpen ? "text-primary" : "text-gray-400"
               }`}
             >
-              <EllipsisVertical size={22} strokeWidth={menuOpen ? 2.5 : 2} className="mb-0.5" />
-              <span className={menuOpen ? "font-medium" : ""}>Meer</span>
+              <EllipsisVertical size={26} strokeWidth={menuOpen ? 2.5 : 2} />
             </button>
 
             {menuOpen && (
