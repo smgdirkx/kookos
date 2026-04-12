@@ -191,8 +191,8 @@ function buildRecipeSystemPrompt(opts: { allowMeat: boolean; allowFish: boolean 
   const dietRules: string[] = [];
 
   if (!opts.allowMeat && !opts.allowFish) {
-    dietRules.push(`VEGETARISCH KOKEN — STRIKTE REGEL:
-Er wordt UITSLUITEND vegetarisch gekookt. Vlees en vis/zeevruchten mogen NOOIT voorkomen in het resultaat — niet als ingrediënt, niet als suggestie, niet als serveertip, niet als variatie. Als het originele recept vlees of vis bevat of suggereert, VERVANG dit altijd door een passend vegetarisch alternatief. Dit geldt voor ALLE onderdelen: ingrediëntenlijst, bereidingswijze, tips, variaties en serveersuggesties.`);
+    dietRules.push(`VOLLEDIG VEGETARISCH — STRIKTE REGEL:
+Deze gebruiker is vegetariër en eet geen vlees én geen vis. Vlees en vis/zeevruchten mogen ABSOLUUT NOOIT voorkomen in het resultaat — niet als ingrediënt, niet als suggestie, niet als serveertip, niet als variatie. Als het originele recept vlees of vis bevat of suggereert, VERVANG dit altijd door een passend vegetarisch alternatief. Dit geldt voor ALLE onderdelen: ingrediëntenlijst, bereidingswijze, tips, variaties en serveersuggesties.`);
   } else if (!opts.allowMeat) {
     dietRules.push(`GEEN VLEES — STRIKTE REGEL:
 Er wordt GEEN vlees gebruikt (kip, rund, varken, lam, etc.). Vlees mag NOOIT voorkomen in het resultaat. Vis en zeevruchten zijn WEL toegestaan. Als het originele recept vlees bevat, VERVANG dit door een passend alternatief (vis, vegetarisch of vegan). Dit geldt voor ALLE onderdelen.`);
@@ -225,10 +225,25 @@ SUGGESTIES:
 - VERPLICHT: Controleer of het recept een basis (koolhydraat) en een eiwit bevat. Kijk in ZOWEL de ingrediëntenlijst als de bereidingstekst. Als een van deze categorieën volledig ontbreekt, MOET je minstens één passend ingrediënt suggereren met isSuggested=true. Een compleet gerecht heeft altijd een koolhydraat én een eiwitbron — sla dit NOOIT over.
 - Ingrediënten die WEL expliciet in de originele ingrediëntenlijst staan krijgen isSuggested=false (of laat het veld weg).
 
+MAATEENHEDEN: Gebruik altijd het metrische stelsel. Reken imperial maten om (oz, lb, cups, °F, inch, etc.) en rond af op nette getallen.
+
+BUITENLANDSE RECEPTEN — INGREDIËNTEN AANPASSEN:
+Alleen van toepassing als het recept duidelijk niet van Nederlandse origine is (Engelstalige site, Amerikaanse/Britse/Aziatische keuken, etc.).
+- Vervang ingrediënten die niet verkrijgbaar zijn in een gewone Nederlandse supermarkt (AH, Jumbo, Lidl) door het beste Nederlandse alternatief. Zet het origineel in de naam als '(vervanging voor: [origineel])'.
+- Pas ook de bereidingswijze aan op het vervangende ingrediënt waar nodig.
+- Vervang alleen wat echt moeilijk te vinden is. Buitenlandse producten die hier gewoon liggen niet vervangen.
+
 TAGS — STRIKTE REGELS:
 - Kies maximaal 3 tags uit de vaste lijst in de tool. Minder is beter — tag alleen wat echt relevant is.
 - GEEN tags die overlappen met bestaande velden: cuisine dekt de keuken, category dekt het gerecht-type (pasta, soep, etc.), difficulty dekt de moeilijkheidsgraad, en bereidingstijd staat apart.
-- Wees selectief: een simpele pasta hoeft geen 3 tags. Als er niets bijzonders is, geef 0 of 1 tag.`;
+- Wees selectief: een simpele pasta hoeft geen 3 tags. Als er niets bijzonders is, geef 0 of 1 tag.${
+    !opts.allowMeat || !opts.allowFish
+      ? `
+
+DIEETBEPERKING — ABSOLUTE EINDCHECK:
+${!opts.allowMeat && !opts.allowFish ? "Deze gebruiker eet GEEN vlees en GEEN vis. Controleer het volledige resultaat vóór opslaan: geen enkel ingrediënt, suggestie, bereidingsstap, tip of variatie mag vlees of vis bevatten. Bij twijfel: weglaten of vervangen." : !opts.allowMeat ? "Deze gebruiker eet GEEN vlees. Controleer het volledige resultaat vóór opslaan: geen enkel ingrediënt, suggestie, bereidingsstap, tip of variatie mag vlees bevatten. Bij twijfel: weglaten of vervangen." : "Deze gebruiker eet GEEN vis of zeevruchten. Controleer het volledige resultaat vóór opslaan: geen enkel ingrediënt, suggestie, bereidingsstap, tip of variatie mag vis of zeevruchten bevatten. Bij twijfel: weglaten of vervangen."}`
+      : ""
+  }`;
 }
 
 // ── Helpers (recipe saving) ──
