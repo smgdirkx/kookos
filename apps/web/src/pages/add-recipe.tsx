@@ -436,6 +436,7 @@ export function AddRecipePage() {
             ref={dishInputRef}
             type="file"
             accept="image/*"
+            capture="environment"
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) handlePhotoSelect(file, "dish");
@@ -657,6 +658,7 @@ export function AddRecipePage() {
             ref={pasteDishInputRef}
             type="file"
             accept="image/*"
+            capture="environment"
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) handlePasteDishPhoto(file);
