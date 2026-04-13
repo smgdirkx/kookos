@@ -396,6 +396,37 @@ app.post("/scan", async (c) => {
     allowFish: user.allowFish ?? false,
   });
 
+  type ImageMediaType = "image/webp" | "image/jpeg" | "image/png" | "image/gif";
+
+  const imageBlocks: Array<{
+    type: "image";
+    source: { type: "base64"; media_type: ImageMediaType; data: string };
+  }> = [
+    {
+      type: "image",
+      source: {
+        type: "base64",
+        media_type: parsed.data.mediaType as ImageMediaType,
+        data: parsed.data.image,
+      },
+    },
+  ];
+
+  if (parsed.data.image2 && parsed.data.mediaType2) {
+    imageBlocks.push({
+      type: "image",
+      source: {
+        type: "base64",
+        media_type: parsed.data.mediaType2 as ImageMediaType,
+        data: parsed.data.image2,
+      },
+    });
+  }
+
+  const textPrompt = parsed.data.image2
+    ? "Extraheer het recept uit deze twee foto's. Het recept loopt door over beide pagina's."
+    : "Extraheer het recept uit deze foto.";
+
   const message = await createMessage({
     max_tokens: 4096,
     system: systemPrompt,
@@ -404,21 +435,7 @@ app.post("/scan", async (c) => {
     messages: [
       {
         role: "user",
-        content: [
-          {
-            type: "image",
-            source: {
-              type: "base64",
-              media_type: parsed.data.mediaType as
-                | "image/webp"
-                | "image/jpeg"
-                | "image/png"
-                | "image/gif",
-              data: parsed.data.image,
-            },
-          },
-          { type: "text", text: "Extraheer het recept uit deze foto." },
-        ],
+        content: [...imageBlocks, { type: "text", text: textPrompt }],
       },
     ],
   });

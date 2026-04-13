@@ -14,7 +14,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { TagInput } from "@/components/tag-input";
 import { Button, Input, Loading, PageHeader, Textarea, useConfirm } from "@/components/ui";
@@ -43,6 +43,7 @@ export function AddRecipePage() {
 
   // Scan state
   const [recipePhoto, setRecipePhoto] = useState<CompressedImage | null>(null);
+  const [recipePhoto2, setRecipePhoto2] = useState<CompressedImage | null>(null);
   const [dishPhoto, setDishPhoto] = useState<CompressedImage | null>(null);
   const [scanTags, setScanTags] = useState<string[]>([]);
   const [compressing, setCompressing] = useState(false);
@@ -54,22 +55,41 @@ export function AddRecipePage() {
   const [pasteCompressing, setPasteCompressing] = useState(false);
 
   const recipeInputRef = useRef<HTMLInputElement>(null);
+  const recipeInput2Ref = useRef<HTMLInputElement>(null);
   const dishInputRef = useRef<HTMLInputElement>(null);
   const pasteDishInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [confirm, confirmModal] = useConfirm();
 
+  // Auto-open camera when entering scan step (and no photo yet)
+  useEffect(() => {
+    if (step === "scan" && !recipePhoto && recipeInputRef.current) {
+      const ref = recipeInputRef.current;
+      const timer = setTimeout(() => {
+        ref.value = "";
+        ref.click();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [step, recipePhoto]);
+
   function updateTask(id: number, update: Partial<BackgroundTask>) {
     setBackgroundTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...update } : t)));
   }
 
-  async function submitScan(photo: CompressedImage, dish: CompressedImage | null, tags: string[]) {
+  async function submitScan(
+    photo: CompressedImage,
+    photo2: CompressedImage | null,
+    dish: CompressedImage | null,
+    tags: string[],
+  ) {
     const saved = await api<{ id: string }>("/api/ai/scan", {
       method: "POST",
       body: {
         image: photo.base64,
         mediaType: photo.mediaType,
+        ...(photo2 ? { image2: photo2.base64, mediaType2: photo2.mediaType } : {}),
         ...(dish ? { dishImage: dish.base64, dishMediaType: dish.mediaType } : {}),
         ...(tags.length ? { extraTags: tags } : {}),
       },
@@ -101,7 +121,7 @@ export function AddRecipePage() {
     setStatus("AI analyseert je foto...");
 
     try {
-      const saved = await submitScan(recipePhoto, dishPhoto, scanTags);
+      const saved = await submitScan(recipePhoto, recipePhoto2, dishPhoto, scanTags);
       navigate(`/recipe/${saved.id}`, { replace: true });
     } catch (err: unknown) {
       setStatus(`Fout: ${err instanceof Error ? err.message : "Onbekende fout"}`);
@@ -114,6 +134,7 @@ export function AddRecipePage() {
     if (!(await confirmMissing(dishPhoto, scanTags))) return;
     const taskId = ++taskIdCounter;
     const photo = recipePhoto;
+    const photo2 = recipePhoto2;
     const dish = dishPhoto;
     const tags = [...scanTags];
 
@@ -121,10 +142,11 @@ export function AddRecipePage() {
 
     // Reset photos for next scan (tags blijven staan)
     setRecipePhoto(null);
+    setRecipePhoto2(null);
     setDishPhoto(null);
 
     // Process in background
-    submitScan(photo, dish, tags)
+    submitScan(photo, photo2, dish, tags)
       .then((saved) => updateTask(taskId, { status: "done", recipeId: saved.id }))
       .catch((err: unknown) =>
         updateTask(taskId, {
@@ -134,12 +156,14 @@ export function AddRecipePage() {
       );
   }
 
-  async function handlePhotoSelect(file: File, type: "recipe" | "dish") {
+  async function handlePhotoSelect(file: File, type: "recipe" | "recipe2" | "dish") {
     setCompressing(true);
     try {
       const compressed = await compressImage(file);
       if (type === "recipe") {
         setRecipePhoto(compressed);
+      } else if (type === "recipe2") {
+        setRecipePhoto2(compressed);
       } else {
         setDishPhoto(compressed);
       }
@@ -281,6 +305,7 @@ export function AddRecipePage() {
     setPasteText("");
     setStatus("");
     setRecipePhoto(null);
+    setRecipePhoto2(null);
     setDishPhoto(null);
     setPasteDishPhoto(null);
     setPasteTags([]);
@@ -389,9 +414,21 @@ export function AddRecipePage() {
             ref={recipeInputRef}
             type="file"
             accept="image/*"
+            capture="environment"
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) handlePhotoSelect(file, "recipe");
+            }}
+            className="hidden"
+          />
+          <input
+            ref={recipeInput2Ref}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handlePhotoSelect(file, "recipe2");
             }}
             className="hidden"
           />
@@ -410,70 +447,115 @@ export function AddRecipePage() {
 
           {!compressing && (
             <>
-              {/* Two photo slots side by side */}
-              <div className="flex gap-3">
-                {/* Recipe text photo */}
-                <div className="flex-1 space-y-1.5">
-                  <p className="text-xs font-medium text-gray-500">Recepttekst</p>
-                  {recipePhoto ? (
-                    <div className="relative">
-                      <img
-                        src={`data:${recipePhoto.mediaType};base64,${recipePhoto.base64}`}
-                        alt="Recept"
-                        className="w-full aspect-[3/4] object-cover rounded-xl border border-gray-200"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setRecipePhoto(null)}
-                        className="absolute top-1.5 right-1.5 p-1 bg-white/90 rounded-full shadow-sm"
-                      >
-                        <X className="w-3.5 h-3.5 text-gray-600" />
-                      </button>
+              {/* Recipe pages */}
+              {recipePhoto ? (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-gray-500">Receptfoto's</p>
+                  <div className="flex gap-3">
+                    {/* Page 1 — filled */}
+                    <div className="flex-1">
+                      <div className="relative">
+                        <img
+                          src={`data:${recipePhoto.mediaType};base64,${recipePhoto.base64}`}
+                          alt="Pagina 1"
+                          className="w-full aspect-[3/4] object-cover rounded-xl border border-gray-200"
+                        />
+                        <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 bg-black/50 text-white text-[10px] font-medium rounded-md">
+                          Pagina 1
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRecipePhoto(null);
+                            setRecipePhoto2(null);
+                          }}
+                          className="absolute top-1.5 right-1.5 p-1 bg-white/90 rounded-full shadow-sm"
+                        >
+                          <X className="w-3.5 h-3.5 text-gray-600" />
+                        </button>
+                      </div>
                     </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => openFilePicker(recipeInputRef)}
-                      className="w-full aspect-[3/4] rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-orange-300 hover:text-orange-400 transition-colors"
-                    >
-                      <BookOpen className="w-6 h-6" />
-                      <span className="text-xs">Foto van tekst</span>
-                    </button>
-                  )}
-                </div>
 
-                {/* Dish photo (optional) */}
-                <div className="flex-1 space-y-1.5">
-                  <p className="text-xs font-medium text-gray-500">
-                    Foto gerecht <span className="text-gray-400">(optioneel)</span>
-                  </p>
-                  {dishPhoto ? (
-                    <div className="relative">
-                      <img
-                        src={`data:${dishPhoto.mediaType};base64,${dishPhoto.base64}`}
-                        alt="Gerecht"
-                        className="w-full aspect-[3/4] object-cover rounded-xl border border-gray-200"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setDishPhoto(null)}
-                        className="absolute top-1.5 right-1.5 p-1 bg-white/90 rounded-full shadow-sm"
-                      >
-                        <X className="w-3.5 h-3.5 text-gray-600" />
-                      </button>
+                    {/* Page 2 */}
+                    <div className="flex-1">
+                      {recipePhoto2 ? (
+                        <div className="relative">
+                          <img
+                            src={`data:${recipePhoto2.mediaType};base64,${recipePhoto2.base64}`}
+                            alt="Pagina 2"
+                            className="w-full aspect-[3/4] object-cover rounded-xl border border-gray-200"
+                          />
+                          <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 bg-black/50 text-white text-[10px] font-medium rounded-md">
+                            Pagina 2
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setRecipePhoto2(null)}
+                            className="absolute top-1.5 right-1.5 p-1 bg-white/90 rounded-full shadow-sm"
+                          >
+                            <X className="w-3.5 h-3.5 text-gray-600" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => openFilePicker(recipeInput2Ref)}
+                          className="w-full aspect-[3/4] rounded-xl border-2 border-dashed border-orange-200 bg-orange-50/30 flex flex-col items-center justify-center gap-2 text-orange-300 hover:border-orange-300 hover:text-orange-400 transition-colors"
+                        >
+                          <ImagePlus className="w-5 h-5" />
+                          <span className="text-xs">Pagina 2</span>
+                          <span className="text-[10px] opacity-70">Optioneel</span>
+                        </button>
+                      )}
                     </div>
-                  ) : (
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => openFilePicker(recipeInputRef)}
+                  className="w-full flex items-center gap-4 p-4 bg-white rounded-xl border-2 border-dashed border-gray-300 hover:border-orange-300 hover:bg-orange-50/50 transition-colors text-left"
+                >
+                  <div className="flex-shrink-0 w-12 h-12 bg-orange-100 text-orange-600 rounded-xl flex items-center justify-center">
+                    <BookOpen className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900">Maak een foto</p>
+                    <p className="text-sm text-gray-500">Foto van de recepttekst</p>
+                  </div>
+                </button>
+              )}
+
+              {/* Dish photo — separate row, compact */}
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-gray-500">
+                  Foto gerecht <span className="text-gray-400">(optioneel)</span>
+                </p>
+                {dishPhoto ? (
+                  <div className="relative w-24">
+                    <img
+                      src={`data:${dishPhoto.mediaType};base64,${dishPhoto.base64}`}
+                      alt="Gerecht"
+                      className="w-24 h-24 object-cover rounded-xl border border-gray-200"
+                    />
                     <button
                       type="button"
-                      onClick={() => openFilePicker(dishInputRef)}
-                      className="w-full aspect-[3/4] rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-orange-300 hover:text-orange-400 transition-colors"
+                      onClick={() => setDishPhoto(null)}
+                      className="absolute top-1 right-1 p-0.5 bg-white/90 rounded-full shadow-sm"
                     >
-                      <ImagePlus className="w-6 h-6" />
-                      <span className="text-xs">Foto van gerecht</span>
-                      <span className="text-[10px] text-gray-300">Aanbevolen</span>
+                      <X className="w-3 h-3 text-gray-600" />
                     </button>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => openFilePicker(dishInputRef)}
+                    className="w-24 h-24 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-1.5 text-gray-400 hover:border-orange-300 hover:text-orange-400 transition-colors"
+                  >
+                    <ImagePlus className="w-5 h-5" />
+                    <span className="text-[10px]">Foto gerecht</span>
+                  </button>
+                )}
               </div>
 
               {/* Tags (e.g. cookbook name) */}

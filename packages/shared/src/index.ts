@@ -130,8 +130,10 @@ export const importRecipeSchema = z.object({
 });
 
 export const scanRecipeSchema = z.object({
-  image: z.string(), // base64 encoded recipe photo
-  mediaType: z.string(), // MIME type van de receptfoto
+  image: z.string(), // base64 encoded recipe photo (page 1)
+  mediaType: z.string(), // MIME type van de receptfoto (page 1)
+  image2: z.string().optional(), // base64 encoded recipe photo (page 2)
+  mediaType2: z.string().optional(), // MIME type van de receptfoto (page 2)
   dishImage: z.string().optional(), // base64 encoded dish photo
   dishMediaType: z.string().optional(), // MIME type van de gerechtfoto
   extraTags: z.array(z.string()).optional(), // user-supplied tags (e.g. cookbook name)
